@@ -8,7 +8,7 @@ version = open(version_path).read().strip()
 
 requires = [
     'zeep[async]>=3.0.0',
-    'aiohttp>=1'
+    'aiohttp>=1.0'
 ]
 
 CLASSIFIERS = [
