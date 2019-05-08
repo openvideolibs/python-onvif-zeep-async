@@ -6,7 +6,10 @@ here = os.path.abspath(os.path.dirname(__file__))
 version_path = os.path.join(here, 'onvif/version.txt')
 version = open(version_path).read().strip()
 
-requires = ['zeep[async] >= 3.0.0']
+requires = [
+    'zeep[async]>=3.0.0',
+    'aiohttp>=1'
+]
 
 CLASSIFIERS = [
     'Development Status :: 3 - Alpha',
@@ -49,6 +52,6 @@ setup(
       include_package_data=True,
       data_files=[(wsdl_dst_dir, wsdl_files)],
       entry_points={
-          'console_scripts': ['onvif-cli = onvif.cli:main']
-          }
-     )
+        'console_scripts': ['onvif-cli = onvif.cli:main']
+      }
+ )
