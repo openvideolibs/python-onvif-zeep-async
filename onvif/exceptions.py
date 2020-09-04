@@ -22,3 +22,17 @@ class ONVIFError(Exception):
 
     def __str__(self):
         return self.reason
+
+
+class ONVIFTimeoutError(ONVIFError):
+    """ONVIF Timeout Exception class."""
+
+    def __init__(self, err):
+        super().__init__(err)
+
+
+class ONVIFAuthError(ONVIFError):
+    """ONVIF Authentication Exception class."""
+
+    def __init__(self, err):
+        super().__init__(err)

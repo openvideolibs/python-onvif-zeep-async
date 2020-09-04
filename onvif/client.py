@@ -1,19 +1,22 @@
 """ONVIF Client."""
 
 import datetime as dt
-import os.path
 import logging
+import os.path
 
+import requests
 from aiohttp import ClientSession
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
+from urllib3.exceptions import ReadTimeoutError
+
+import zeep.helpers
+from onvif.definition import SERVICES
+from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 from zeep.asyncio import AsyncTransport
 from zeep.cache import SqliteCache
-from zeep.client import Client, CachingClient, Settings
+from zeep.client import CachingClient, Client, Settings
 from zeep.exceptions import Fault
 from zeep.wsse.username import UsernameToken
-import zeep.helpers
-
-from onvif.exceptions import ONVIFError
-from onvif.definition import SERVICES
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -211,6 +214,7 @@ class ONVIFCamera:
     # Another way:
     >>> ptz_service.GetConfiguration()
     """
+
     def __init__(
         self,
         host,
@@ -288,6 +292,37 @@ class ONVIFCamera:
         """Close all transports."""
         for service in self.services.values():
             await service.close()
+
+    def get_snapshot(self, url, basic_auth):
+        """Get a snapshot image from the camera."""
+        if url is None:
+            return None
+
+        auth = None
+        if self.user and self.passwd:
+            if basic_auth:
+                auth = HTTPBasicAuth(self.user, self.passwd)
+            else:
+                auth = HTTPDigestAuth(self.user, self.passwd)
+
+        try:
+            response = requests.get(url, timeout=5, auth=auth)
+        except requests.exceptions.Timeout as error:
+            raise ONVIFTimeoutError(error) from error
+        except requests.exceptions.ConnectionError as error:
+            if isinstance(error.args[0], ReadTimeoutError):
+                raise ONVIFTimeoutError(error) from error
+            raise ONVIFError(error) from error
+        except requests.exceptions.RequestException as error:
+            raise ONVIFError(error) from error
+
+        if response.status_code == 401:
+            raise ONVIFAuthError(f"Failed to authenticate to {url}")
+
+        if response.status_code < 300:
+            return response.content
+
+        return None
 
     def get_definition(self, name, port_type=None):
         """Returns xaddr and wsdl of specified service"""
