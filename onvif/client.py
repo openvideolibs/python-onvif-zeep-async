@@ -6,6 +6,7 @@ import os.path
 
 import requests
 from aiohttp import ClientSession
+from asyncio import get_running_loop
 from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 from urllib3.exceptions import ReadTimeoutError
 
@@ -245,6 +246,8 @@ class ONVIFCamera:
         self.services = {}
 
         self.to_dict = ONVIFService.to_dict
+        self._loop = None
+        self._snapshot_uris = {}
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
@@ -293,10 +296,26 @@ class ONVIFCamera:
         for service in self.services.values():
             await service.close()
 
-    def get_snapshot(self, url, basic_auth):
+    async def get_snapshot_uri(self, profile):
+        """Get the snapshot uri for a given profile."""
+        uri = self._snapshot_uris.get(profile.token)
+        if uri is None:
+            media_service = self.create_media_service()
+            req = media_service.create_type("GetSnapshotUri")
+            req.ProfileToken = profile.token
+            result = await media_service.GetSnapshotUri(req)
+            uri = result.Uri
+            self._snapshot_uris[profile.token] = uri
+        return uri
+
+    async def get_snapshot(self, profile, basic_auth=False):
         """Get a snapshot image from the camera."""
-        if url is None:
+        uri = await self.get_snapshot_uri(profile)
+        if uri is None:
             return None
+
+        if self._loop is None:
+            self._loop = get_running_loop()
 
         auth = None
         if self.user and self.passwd:
@@ -305,8 +324,11 @@ class ONVIFCamera:
             else:
                 auth = HTTPDigestAuth(self.user, self.passwd)
 
+        def _fetch():
+            return requests.get(uri, timeout=5, auth=auth)
+
         try:
-            response = requests.get(url, timeout=5, auth=auth)
+            response = await self._loop.run_in_executor(None, _fetch)
         except requests.exceptions.Timeout as error:
             raise ONVIFTimeoutError(error) from error
         except requests.exceptions.ConnectionError as error:
@@ -317,7 +339,7 @@ class ONVIFCamera:
             raise ONVIFError(error) from error
 
         if response.status_code == 401:
-            raise ONVIFAuthError(f"Failed to authenticate to {url}")
+            raise ONVIFAuthError(f"Failed to authenticate to {uri}")
 
         if response.status_code < 300:
             return response.content
