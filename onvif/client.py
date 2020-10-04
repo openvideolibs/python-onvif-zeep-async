@@ -296,21 +296,21 @@ class ONVIFCamera:
         for service in self.services.values():
             await service.close()
 
-    async def get_snapshot_uri(self, profile):
+    async def get_snapshot_uri(self, profile_token):
         """Get the snapshot uri for a given profile."""
-        uri = self._snapshot_uris.get(profile.token)
+        uri = self._snapshot_uris.get(profile_token)
         if uri is None:
             media_service = self.create_media_service()
             req = media_service.create_type("GetSnapshotUri")
-            req.ProfileToken = profile.token
+            req.ProfileToken = profile_token
             result = await media_service.GetSnapshotUri(req)
             uri = result.Uri
-            self._snapshot_uris[profile.token] = uri
+            self._snapshot_uris[profile_token] = uri
         return uri
 
-    async def get_snapshot(self, profile, basic_auth=False):
+    async def get_snapshot(self, profile_token, basic_auth=False):
         """Get a snapshot image from the camera."""
-        uri = await self.get_snapshot_uri(profile)
+        uri = await self.get_snapshot_uri(profile_token)
         if uri is None:
             return None
 
