@@ -5,7 +5,7 @@ ONVIF Client Implementation in Python 3
 
 Dependencies
 ------------
-`zeep[async] <http://docs.python-zeep.org>`_ >= 3.0.0
+`zeep[async] <http://docs.python-zeep.org>`_ == 3.4.0
 `aiohttp <https://aiohttp.readthedocs.io>`_ >= 1.0
 
 Install python-onvif-zeep-async
