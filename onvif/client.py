@@ -4,12 +4,13 @@ import datetime as dt
 import logging
 import os.path
 
-from aiohttp import ClientSession
-from zeep.asyncio import AsyncTransport
+from httpx import AsyncClient
 from zeep.cache import SqliteCache
-from zeep.client import CachingClient, Client, Settings
+from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
 from zeep.exceptions import Fault
 import zeep.helpers
+from zeep.proxy import AsyncServiceProxy
+from zeep.transports import AsyncTransport
 from zeep.wsse.username import UsernameToken
 
 from onvif.definition import SERVICES
@@ -27,7 +28,16 @@ def safe_func(func):
         try:
             return func(*args, **kwargs)
         except Exception as err:
-            # print('Ouuups: err =', err, ', func =', func, ', args =', args, ', kwargs =', kwargs)
+            print(
+                "Ouuups: err =",
+                err,
+                ", func =",
+                func,
+                ", args =",
+                args,
+                ", kwargs =",
+                kwargs,
+            )
             raise ONVIFError(err)
 
     return wrapped
@@ -55,6 +65,24 @@ class UsernameDigestTokenDtDiff(UsernameToken):
         result = super().apply(envelope, headers)
         self.created = old_created
         return result
+
+
+class ZeepAsyncClient(BaseZeepAsyncClient):
+    """Overwrite create_service method to be async."""
+
+    def create_service(self, binding_name, address):
+        """Create a new ServiceProxy for the given binding name and address.
+        :param binding_name: The QName of the binding
+        :param address: The address of the endpoint
+        """
+        try:
+            binding = self.wsdl.bindings[binding_name]
+        except KeyError:
+            raise ValueError(
+                "No binding found with the given QName. Available bindings "
+                "are: %s" % (", ".join(self.wsdl.bindings.keys()))
+            )
+        return AsyncServiceProxy(self, binding, address=address)
 
 
 class ONVIFService:
@@ -114,17 +142,16 @@ class ONVIFService:
         # Create soap client
         if not zeep_client:
             if not self.transport:
-                session = ClientSession()
+                client = AsyncClient()
                 self.transport = (
-                    AsyncTransport(None, session=session)
+                    AsyncTransport(client=client)
                     if no_cache
-                    else AsyncTransport(None, session=session, cache=SqliteCache())
+                    else AsyncTransport(client=client, cache=SqliteCache())
                 )
-            ClientType = Client if no_cache else CachingClient
             settings = Settings()
             settings.strict = False
             settings.xml_huge_tree = True
-            self.zeep_client = ClientType(
+            self.zeep_client = ZeepAsyncClient(
                 wsdl=url, wsse=wsse, transport=self.transport, settings=settings
             )
         else:
@@ -147,8 +174,8 @@ class ONVIFService:
         self.create_type = lambda x: self.zeep_client.get_element(active_ns + ":" + x)()
 
     async def close(self):
-        """Close the transport session."""
-        await self.transport.session.close()
+        """Close the transport."""
+        await self.transport.aclose()
 
     @staticmethod
     @safe_func

@@ -1,8 +1,9 @@
 """Example to fetch pullpoint events."""
 import asyncio
 import datetime as dt
-from pytz import UTC
 import logging
+
+from pytz import UTC
 from zeep import xsd
 
 from onvif import ONVIFCamera
@@ -24,7 +25,7 @@ async def run():
         print("PullPoint not supported")
         return
 
-    event_service = mycam.get_service("events")
+    event_service = mycam.create_events_service()
     properties = await event_service.GetEventProperties()
     print(properties)
     capabilities = await event_service.GetServiceCapabilities()
@@ -39,11 +40,14 @@ async def run():
     print(messages)
 
     subscription = mycam.create_subscription_service("PullPointSubscription")
-    # req = subscription.zeep_client.get_element("ns5:Renew")
-    # req.TerminationTime = str(dt.datetime.now(UTC) + dt.timedelta(minutes=10))
-    termination_time = (dt.datetime.now(UTC) + dt.timedelta(minutes=10)).isoformat()
+    termination_time = (
+        (dt.datetime.utcnow() + dt.timedelta(days=1))
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
     await subscription.Renew(termination_time)
     await subscription.Unsubscribe()
+    await mycam.close()
 
 
 if __name__ == "__main__":
