@@ -1,19 +1,19 @@
 """ONVIF Client."""
 
 import datetime as dt
-import os.path
 import logging
+import os.path
 
 from aiohttp import ClientSession
 from zeep.asyncio import AsyncTransport
 from zeep.cache import SqliteCache
-from zeep.client import Client, CachingClient, Settings
+from zeep.client import CachingClient, Client, Settings
 from zeep.exceptions import Fault
-from zeep.wsse.username import UsernameToken
 import zeep.helpers
+from zeep.wsse.username import UsernameToken
 
-from onvif.exceptions import ONVIFError
 from onvif.definition import SERVICES
+from onvif.exceptions import ONVIFError
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -211,6 +211,7 @@ class ONVIFCamera:
     # Another way:
     >>> ptz_service.GetConfiguration()
     """
+
     def __init__(
         self,
         host,
@@ -297,7 +298,7 @@ class ONVIFCamera:
         wsdl_file = SERVICES[name]["wsdl"]
         namespace = SERVICES[name]["ns"]
 
-        binding_name = "{%s}%s" % (namespace, SERVICES[name]["binding"])
+        binding_name = "{{{}}}{}".format(namespace, SERVICES[name]["binding"])
 
         if port_type:
             namespace += "/" + port_type
@@ -308,7 +309,7 @@ class ONVIFCamera:
 
         # XAddr for devicemgmt is fixed:
         if name == "devicemgmt":
-            xaddr = "%s:%s/onvif/device_service" % (
+            xaddr = "{}:{}/onvif/device_service".format(
                 self.host
                 if (self.host.startswith("http://") or self.host.startswith("https://"))
                 else "http://%s" % self.host,

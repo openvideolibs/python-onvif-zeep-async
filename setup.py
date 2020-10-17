@@ -1,12 +1,13 @@
 """Package Setup."""
 import os
-from setuptools import setup, find_packages
+
+from setuptools import find_packages, setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 version_path = os.path.join(here, "onvif/version.txt")
 version = open(version_path).read().strip()
 
-requires = ["zeep[async]==3.4.0", "aiohttp>=1.0"]
+requires = ["httpx==0.16.1", "zeep[async]==4.0.0"]
 
 CLASSIFIERS = [
     "Development Status :: 3 - Alpha",
@@ -30,7 +31,7 @@ setup(
     name="onvif-zeep-async",
     version=version,
     description="Async Python Client for ONVIF Camera",
-    long_description=open("README.rst", "r").read(),
+    long_description=open("README.rst").read(),
     author="Cherish Chen",
     author_email="sinchb128@gmail.com",
     maintainer="sinchb",
