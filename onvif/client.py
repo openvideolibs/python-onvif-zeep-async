@@ -143,7 +143,7 @@ class ONVIFService:
         # Create soap client
         if not zeep_client:
             if not self.transport:
-                client = AsyncClient()
+                client = AsyncClient(timeout=90)
                 self.transport = (
                     AsyncTransport(client=client)
                     if no_cache
