@@ -4,7 +4,8 @@ import datetime as dt
 import logging
 import os.path
 
-from httpx import AsyncClient
+import httpx
+from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
 from zeep.exceptions import Fault
@@ -14,7 +15,7 @@ from zeep.transports import AsyncTransport
 from zeep.wsse.username import UsernameToken
 
 from onvif.definition import SERVICES
-from onvif.exceptions import ONVIFError
+from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -270,6 +271,9 @@ class ONVIFCamera:
 
         self.to_dict = ONVIFService.to_dict
 
+        self._client = AsyncClient()
+        self._snapshot_uris = {}
+
     async def update_xaddrs(self):
         """Update xaddrs for services."""
         self.dt_diff = None
@@ -314,8 +318,49 @@ class ONVIFCamera:
 
     async def close(self):
         """Close all transports."""
+        await self._client.aclose()
         for service in self.services.values():
             await service.close()
+
+    async def get_snapshot_uri(self, profile_token):
+        """Get the snapshot uri for a given profile."""
+        uri = self._snapshot_uris.get(profile_token)
+        if uri is None:
+            media_service = self.create_media_service()
+            req = media_service.create_type("GetSnapshotUri")
+            req.ProfileToken = profile_token
+            result = await media_service.GetSnapshotUri(req)
+            uri = result.Uri
+            self._snapshot_uris[profile_token] = uri
+        return uri
+
+    async def get_snapshot(self, profile_token, basic_auth=False):
+        """Get a snapshot image from the camera."""
+        uri = await self.get_snapshot_uri(profile_token)
+        if uri is None:
+            return None
+
+        auth = None
+        if self.user and self.passwd:
+            if basic_auth:
+                auth = BasicAuth(self.user, self.passwd)
+            else:
+                auth = DigestAuth(self.user, self.passwd)
+
+        try:
+            response = await self._client.get(uri, auth=auth)
+        except httpx.TimeoutException as error:
+            raise ONVIFTimeoutError(error) from error
+        except httpx.RequestError as error:
+            raise ONVIFError(error) from error
+
+        if response.status_code == 401:
+            raise ONVIFAuthError(f"Failed to authenticate to {uri}")
+
+        if response.status_code < 300:
+            return response.content
+
+        return None
 
     def get_definition(self, name, port_type=None):
         """Returns xaddr and wsdl of specified service"""
