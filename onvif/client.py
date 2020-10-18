@@ -1,5 +1,4 @@
 """ONVIF Client."""
-
 import datetime as dt
 import logging
 import os.path
@@ -29,16 +28,6 @@ def safe_func(func):
         try:
             return func(*args, **kwargs)
         except Exception as err:
-            print(
-                "Ouuups: err =",
-                err,
-                ", func =",
-                func,
-                ", args =",
-                args,
-                ", kwargs =",
-                kwargs,
-            )
             raise ONVIFError(err)
 
     return wrapped
@@ -125,40 +114,31 @@ class ONVIFService:
         passwd,
         url,
         encrypt=True,
-        zeep_client=None,
         no_cache=False,
         dt_diff=None,
         binding_name="",
-        transport=None,
-        client=None,
     ):
         if not os.path.isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
 
         self.url = url
         self.xaddr = xaddr
-        self.transport = transport
         wsse = UsernameDigestTokenDtDiff(
             user, passwd, dt_diff=dt_diff, use_digest=encrypt
         )
         # Create soap client
-        if not zeep_client:
-            if not self.transport:
-                if not client:
-                    client = AsyncClient(timeout=90)
-                self.transport = (
-                    AsyncTransport(client=client)
-                    if no_cache
-                    else AsyncTransport(client=client, cache=SqliteCache())
-                )
-            settings = Settings()
-            settings.strict = False
-            settings.xml_huge_tree = True
-            self.zeep_client = ZeepAsyncClient(
-                wsdl=url, wsse=wsse, transport=self.transport, settings=settings
-            )
-        else:
-            self.zeep_client = zeep_client
+        client = AsyncClient(timeout=90)
+        self.transport = (
+            AsyncTransport(client=client)
+            if no_cache
+            else AsyncTransport(client=client, cache=SqliteCache())
+        )
+        settings = Settings()
+        settings.strict = False
+        settings.xml_huge_tree = True
+        self.zeep_client = ZeepAsyncClient(
+            wsdl=url, wsse=wsse, transport=self.transport, settings=settings
+        )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
 
         # Set soap header for authentication
@@ -252,8 +232,6 @@ class ONVIFCamera:
         encrypt=True,
         no_cache=False,
         adjust_time=False,
-        transport=None,
-        client=None,
     ):
         os.environ.pop("http_proxy", None)
         os.environ.pop("https_proxy", None)
@@ -265,8 +243,6 @@ class ONVIFCamera:
         self.encrypt = encrypt
         self.no_cache = no_cache
         self.adjust_time = adjust_time
-        self.transport = transport
-        self.client = client or AsyncClient(timeout=90)
         self.dt_diff = None
         self.xaddrs = {}
 
@@ -276,6 +252,7 @@ class ONVIFCamera:
         self.to_dict = ONVIFService.to_dict
 
         self._snapshot_uris = {}
+        self._snapshot_client = AsyncClient()
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
@@ -321,7 +298,7 @@ class ONVIFCamera:
 
     async def close(self):
         """Close all transports."""
-        await self.client.aclose()
+        await self._snapshot_client.aclose()
         for service in self.services.values():
             await service.close()
 
@@ -351,7 +328,7 @@ class ONVIFCamera:
                 auth = DigestAuth(self.user, self.passwd)
 
         try:
-            response = await self.client.get(uri, auth=auth)
+            response = await self._snapshot_client.get(uri, auth=auth)
         except httpx.TimeoutException as error:
             raise ONVIFTimeoutError(error) from error
         except httpx.RequestError as error:
@@ -407,8 +384,9 @@ class ONVIFCamera:
 
         # Don't re-create bindings if the xaddr remains the same.
         # The xaddr can change when a new PullPointSubscription is created.
-        binding = self.services.get(binding_name)
-        if binding and binding.xaddr == xaddr:
+        binding_key = f"{binding_name}{xaddr}"
+        binding = self.services.get(binding_key)
+        if binding:
             return binding
 
         service = ONVIFService(
@@ -420,11 +398,9 @@ class ONVIFCamera:
             no_cache=self.no_cache,
             dt_diff=self.dt_diff,
             binding_name=binding_name,
-            transport=self.transport,
-            client=self.client,
         )
 
-        self.services[binding_name] = service
+        self.services[binding_key] = service
 
         return service
 
