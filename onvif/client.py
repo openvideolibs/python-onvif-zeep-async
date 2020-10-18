@@ -7,7 +7,7 @@ import os.path
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
-from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
+from zeep.client import AsyncClient as BaseZeepAsyncClient, Client, Settings
 from zeep.exceptions import Fault
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
@@ -130,6 +130,7 @@ class ONVIFService:
         dt_diff=None,
         binding_name="",
         transport=None,
+        client=None,
     ):
         if not os.path.isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -143,7 +144,8 @@ class ONVIFService:
         # Create soap client
         if not zeep_client:
             if not self.transport:
-                client = AsyncClient(timeout=90)
+                if not client:
+                    client = AsyncClient(timeout=90)
                 self.transport = (
                     AsyncTransport(client=client)
                     if no_cache
@@ -251,6 +253,7 @@ class ONVIFCamera:
         no_cache=False,
         adjust_time=False,
         transport=None,
+        client=None,
     ):
         os.environ.pop("http_proxy", None)
         os.environ.pop("https_proxy", None)
@@ -263,6 +266,7 @@ class ONVIFCamera:
         self.no_cache = no_cache
         self.adjust_time = adjust_time
         self.transport = transport
+        self.client = client or AsyncClient(timeout=90)
         self.dt_diff = None
         self.xaddrs = {}
 
@@ -271,7 +275,6 @@ class ONVIFCamera:
 
         self.to_dict = ONVIFService.to_dict
 
-        self._client = AsyncClient()
         self._snapshot_uris = {}
 
     async def update_xaddrs(self):
@@ -318,7 +321,7 @@ class ONVIFCamera:
 
     async def close(self):
         """Close all transports."""
-        await self._client.aclose()
+        await self.client.aclose()
         for service in self.services.values():
             await service.close()
 
@@ -348,7 +351,7 @@ class ONVIFCamera:
                 auth = DigestAuth(self.user, self.passwd)
 
         try:
-            response = await self._client.get(uri, auth=auth)
+            response = await self.client.get(uri, auth=auth)
         except httpx.TimeoutException as error:
             raise ONVIFTimeoutError(error) from error
         except httpx.RequestError as error:
@@ -418,6 +421,7 @@ class ONVIFCamera:
             dt_diff=self.dt_diff,
             binding_name=binding_name,
             transport=self.transport,
+            client=self.client,
         )
 
         self.services[binding_name] = service
