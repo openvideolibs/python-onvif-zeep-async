@@ -1,19 +1,20 @@
 """ONVIF Client."""
-
 import datetime as dt
-import os.path
 import logging
+import os.path
 
-from aiohttp import ClientSession
-from zeep.asyncio import AsyncTransport
+import httpx
+from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
-from zeep.client import Client, CachingClient, Settings
+from zeep.client import AsyncClient as BaseZeepAsyncClient, Client, Settings
 from zeep.exceptions import Fault
-from zeep.wsse.username import UsernameToken
 import zeep.helpers
+from zeep.proxy import AsyncServiceProxy
+from zeep.transports import AsyncTransport
+from zeep.wsse.username import UsernameToken
 
-from onvif.exceptions import ONVIFError
 from onvif.definition import SERVICES
+from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +28,6 @@ def safe_func(func):
         try:
             return func(*args, **kwargs)
         except Exception as err:
-            # print('Ouuups: err =', err, ', func =', func, ', args =', args, ', kwargs =', kwargs)
             raise ONVIFError(err)
 
     return wrapped
@@ -55,6 +55,24 @@ class UsernameDigestTokenDtDiff(UsernameToken):
         result = super().apply(envelope, headers)
         self.created = old_created
         return result
+
+
+class ZeepAsyncClient(BaseZeepAsyncClient):
+    """Overwrite create_service method to be async."""
+
+    def create_service(self, binding_name, address):
+        """Create a new ServiceProxy for the given binding name and address.
+        :param binding_name: The QName of the binding
+        :param address: The address of the endpoint
+        """
+        try:
+            binding = self.wsdl.bindings[binding_name]
+        except KeyError:
+            raise ValueError(
+                "No binding found with the given QName. Available bindings "
+                "are: %s" % (", ".join(self.wsdl.bindings.keys()))
+            )
+        return AsyncServiceProxy(self, binding, address=address)
 
 
 class ONVIFService:
@@ -96,39 +114,31 @@ class ONVIFService:
         passwd,
         url,
         encrypt=True,
-        zeep_client=None,
         no_cache=False,
         dt_diff=None,
         binding_name="",
-        transport=None,
     ):
         if not os.path.isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
 
         self.url = url
         self.xaddr = xaddr
-        self.transport = transport
         wsse = UsernameDigestTokenDtDiff(
             user, passwd, dt_diff=dt_diff, use_digest=encrypt
         )
         # Create soap client
-        if not zeep_client:
-            if not self.transport:
-                session = ClientSession()
-                self.transport = (
-                    AsyncTransport(None, session=session)
-                    if no_cache
-                    else AsyncTransport(None, session=session, cache=SqliteCache())
-                )
-            ClientType = Client if no_cache else CachingClient
-            settings = Settings()
-            settings.strict = False
-            settings.xml_huge_tree = True
-            self.zeep_client = ClientType(
-                wsdl=url, wsse=wsse, transport=self.transport, settings=settings
-            )
-        else:
-            self.zeep_client = zeep_client
+        client = AsyncClient(timeout=90)
+        self.transport = (
+            AsyncTransport(client=client)
+            if no_cache
+            else AsyncTransport(client=client, cache=SqliteCache())
+        )
+        settings = Settings()
+        settings.strict = False
+        settings.xml_huge_tree = True
+        self.zeep_client = ZeepAsyncClient(
+            wsdl=url, wsse=wsse, transport=self.transport, settings=settings
+        )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
 
         # Set soap header for authentication
@@ -147,8 +157,8 @@ class ONVIFService:
         self.create_type = lambda x: self.zeep_client.get_element(active_ns + ":" + x)()
 
     async def close(self):
-        """Close the transport session."""
-        await self.transport.session.close()
+        """Close the transport."""
+        await self.transport.aclose()
 
     @staticmethod
     @safe_func
@@ -211,6 +221,7 @@ class ONVIFCamera:
     # Another way:
     >>> ptz_service.GetConfiguration()
     """
+
     def __init__(
         self,
         host,
@@ -221,7 +232,6 @@ class ONVIFCamera:
         encrypt=True,
         no_cache=False,
         adjust_time=False,
-        transport=None,
     ):
         os.environ.pop("http_proxy", None)
         os.environ.pop("https_proxy", None)
@@ -233,7 +243,6 @@ class ONVIFCamera:
         self.encrypt = encrypt
         self.no_cache = no_cache
         self.adjust_time = adjust_time
-        self.transport = transport
         self.dt_diff = None
         self.xaddrs = {}
 
@@ -241,6 +250,9 @@ class ONVIFCamera:
         self.services = {}
 
         self.to_dict = ONVIFService.to_dict
+
+        self._snapshot_uris = {}
+        self._snapshot_client = AsyncClient()
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
@@ -286,8 +298,49 @@ class ONVIFCamera:
 
     async def close(self):
         """Close all transports."""
+        await self._snapshot_client.aclose()
         for service in self.services.values():
             await service.close()
+
+    async def get_snapshot_uri(self, profile_token):
+        """Get the snapshot uri for a given profile."""
+        uri = self._snapshot_uris.get(profile_token)
+        if uri is None:
+            media_service = self.create_media_service()
+            req = media_service.create_type("GetSnapshotUri")
+            req.ProfileToken = profile_token
+            result = await media_service.GetSnapshotUri(req)
+            uri = result.Uri
+            self._snapshot_uris[profile_token] = uri
+        return uri
+
+    async def get_snapshot(self, profile_token, basic_auth=False):
+        """Get a snapshot image from the camera."""
+        uri = await self.get_snapshot_uri(profile_token)
+        if uri is None:
+            return None
+
+        auth = None
+        if self.user and self.passwd:
+            if basic_auth:
+                auth = BasicAuth(self.user, self.passwd)
+            else:
+                auth = DigestAuth(self.user, self.passwd)
+
+        try:
+            response = await self._snapshot_client.get(uri, auth=auth)
+        except httpx.TimeoutException as error:
+            raise ONVIFTimeoutError(error) from error
+        except httpx.RequestError as error:
+            raise ONVIFError(error) from error
+
+        if response.status_code == 401:
+            raise ONVIFAuthError(f"Failed to authenticate to {uri}")
+
+        if response.status_code < 300:
+            return response.content
+
+        return None
 
     def get_definition(self, name, port_type=None):
         """Returns xaddr and wsdl of specified service"""
@@ -297,7 +350,7 @@ class ONVIFCamera:
         wsdl_file = SERVICES[name]["wsdl"]
         namespace = SERVICES[name]["ns"]
 
-        binding_name = "{%s}%s" % (namespace, SERVICES[name]["binding"])
+        binding_name = "{{{}}}{}".format(namespace, SERVICES[name]["binding"])
 
         if port_type:
             namespace += "/" + port_type
@@ -308,7 +361,7 @@ class ONVIFCamera:
 
         # XAddr for devicemgmt is fixed:
         if name == "devicemgmt":
-            xaddr = "%s:%s/onvif/device_service" % (
+            xaddr = "{}:{}/onvif/device_service".format(
                 self.host
                 if (self.host.startswith("http://") or self.host.startswith("https://"))
                 else "http://%s" % self.host,
@@ -331,8 +384,9 @@ class ONVIFCamera:
 
         # Don't re-create bindings if the xaddr remains the same.
         # The xaddr can change when a new PullPointSubscription is created.
-        binding = self.services.get(binding_name)
-        if binding and binding.xaddr == xaddr:
+        binding_key = f"{binding_name}{xaddr}"
+        binding = self.services.get(binding_key)
+        if binding:
             return binding
 
         service = ONVIFService(
@@ -344,10 +398,9 @@ class ONVIFCamera:
             no_cache=self.no_cache,
             dt_diff=self.dt_diff,
             binding_name=binding_name,
-            transport=self.transport,
         )
 
-        self.services[binding_name] = service
+        self.services[binding_key] = service
 
         return service
 
