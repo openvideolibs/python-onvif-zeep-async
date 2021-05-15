@@ -1,5 +1,5 @@
 # Package
-httpx==0.16.1
+httpx>=0.16.1
 zeep[async]==4.0.0
 
 # Dev
