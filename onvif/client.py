@@ -288,7 +288,7 @@ class ONVIFCamera:
                 cdate.Time.Second,
             )
             self.dt_diff = cam_date - dt.datetime.utcnow()
-            devicemgmt.close()
+            await devicemgmt.close()
             del self.services[devicemgmt.binding_key]
             devicemgmt = self.create_devicemgmt_service()
 
