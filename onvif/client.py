@@ -290,6 +290,7 @@ class ONVIFCamera:
             self.dt_diff = cam_date - dt.datetime.utcnow()
             devicemgmt.close()
             del self.services[devicemgmt.binding_key]
+            devicemgmt = self.create_devicemgmt_service()
 
         # Get XAddr of services on the device
         self.xaddrs = {}
