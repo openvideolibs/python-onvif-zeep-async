@@ -117,12 +117,14 @@ class ONVIFService:
         no_cache=False,
         dt_diff=None,
         binding_name="",
+        binding_key="",
     ):
         if not os.path.isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
 
         self.url = url
         self.xaddr = xaddr
+        self.binding_key = binding_key
         wsse = UsernameDigestTokenDtDiff(
             user, passwd, dt_diff=dt_diff, use_digest=encrypt
         )
@@ -286,6 +288,8 @@ class ONVIFCamera:
                 cdate.Time.Second,
             )
             self.dt_diff = cam_date - dt.datetime.utcnow()
+            devicemgmt.close()
+            del self.services[devicemgmt.binding_key]
 
         # Get XAddr of services on the device
         self.xaddrs = {}
@@ -414,6 +418,7 @@ class ONVIFCamera:
             no_cache=self.no_cache,
             dt_diff=self.dt_diff,
             binding_name=binding_name,
+            binding_key=binding_key
         )
 
         self.services[binding_key] = service
