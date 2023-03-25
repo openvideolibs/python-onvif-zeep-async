@@ -2,6 +2,7 @@
 import asyncio
 import contextlib
 import datetime as dt
+from functools import lru_cache
 import logging
 import os.path
 import ssl
@@ -100,6 +101,11 @@ class ZeepAsyncClient(BaseZeepAsyncClient):
         return AsyncServiceProxy(self, binding, address=address)
 
 
+# This does blocking I/O (stat) so we cache the result
+# to minimize the impact of the blocking I/O.
+_path_isfile = lru_cache(maxsize=128)(os.path.isfile)
+
+
 class ONVIFService:
     """
     Python Implemention for ONVIF Service.
@@ -144,7 +150,7 @@ class ONVIFService:
         binding_name="",
         binding_key="",
     ):
-        if not os.path.isfile(url):
+        if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
 
         self.url = url
@@ -400,7 +406,7 @@ class ONVIFCamera:
             namespace += "/" + port_type
 
         wsdlpath = os.path.join(self.wsdl_dir, wsdl_file)
-        if not os.path.isfile(wsdlpath):
+        if not _path_isfile(wsdlpath):
             raise ONVIFError("No such file: %s" % wsdlpath)
 
         # XAddr for devicemgmt is fixed:
