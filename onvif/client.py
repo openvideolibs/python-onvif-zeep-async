@@ -1,9 +1,12 @@
 """ONVIF Client."""
+import asyncio
 import contextlib
 import datetime as dt
+from functools import lru_cache
 import logging
 import os.path
 import ssl
+from typing import Tuple, Dict, Optional
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
@@ -98,6 +101,11 @@ class ZeepAsyncClient(BaseZeepAsyncClient):
         return AsyncServiceProxy(self, binding, address=address)
 
 
+# This does blocking I/O (stat) so we cache the result
+# to minimize the impact of the blocking I/O.
+_path_isfile = lru_cache(maxsize=128)(os.path.isfile)
+
+
 class ONVIFService:
     """
     Python Implemention for ONVIF Service.
@@ -132,7 +140,7 @@ class ONVIFService:
     @safe_func
     def __init__(
         self,
-        xaddr,
+        xaddr: str,
         user,
         passwd,
         url,
@@ -142,7 +150,7 @@ class ONVIFService:
         binding_name="",
         binding_key="",
     ):
-        if not os.path.isfile(url):
+        if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
 
         self.url = url
@@ -281,12 +289,13 @@ class ONVIFCamera:
         self.xaddrs = {}
 
         # Active service client container
-        self.services = {}
+        self.services: Dict[Tuple[str, Optional[str]], ONVIFService] = {}
 
         self.to_dict = ONVIFService.to_dict
 
         self._snapshot_uris = {}
         self._snapshot_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT)
+        self._background_tasks = set()
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
@@ -397,7 +406,7 @@ class ONVIFCamera:
             namespace += "/" + port_type
 
         wsdlpath = os.path.join(self.wsdl_dir, wsdl_file)
-        if not os.path.isfile(wsdlpath):
+        if not _path_isfile(wsdlpath):
             raise ONVIFError("No such file: %s" % wsdlpath)
 
         # XAddr for devicemgmt is fixed:
@@ -419,16 +428,31 @@ class ONVIFCamera:
 
     def create_onvif_service(self, name, port_type=None):
         """Create ONVIF service client"""
-
         name = name.lower()
-        xaddr, wsdl_file, binding_name = self.get_definition(name, port_type)
-
         # Don't re-create bindings if the xaddr remains the same.
         # The xaddr can change when a new PullPointSubscription is created.
-        binding_key = f"{binding_name}{xaddr}"
-        binding = self.services.get(binding_key)
-        if binding:
-            return binding
+        binding_key = (name, port_type)
+
+        xaddr, wsdl_file, binding_name = self.get_definition(name, port_type)
+
+        existing_service = self.services.get(binding_key)
+        if existing_service:
+            if existing_service.xaddr == xaddr:
+                return existing_service
+            else:
+                # Close the existing service since it's no longer valid.
+                # This can happen when a new PullPointSubscription is created.
+                logger.debug(
+                    "Closing service %s with %s", binding_key, existing_service.xaddr
+                )
+                # Hold a reference to the task so it doesn't get
+                # garbage collected before it completes.
+                task = asyncio.create_task(existing_service.close())
+                task.add_done_callback(self._background_tasks.remove)
+                self._background_tasks.add(task)
+            self.services.pop(binding_key)
+
+        logger.debug("Creating service %s with %s", binding_key, xaddr)
 
         service = ONVIFService(
             xaddr,
