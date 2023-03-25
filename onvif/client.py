@@ -432,6 +432,9 @@ class ONVIFCamera:
         # Don't re-create bindings if the xaddr remains the same.
         # The xaddr can change when a new PullPointSubscription is created.
         binding_key = (name, port_type)
+
+        xaddr, wsdl_file, binding_name = self.get_definition(name, port_type)
+
         existing_service = self.services.get(binding_key)
         if existing_service:
             if existing_service.xaddr == xaddr:
@@ -448,8 +451,6 @@ class ONVIFCamera:
                 task.add_done_callback(self._background_tasks.remove)
                 self._background_tasks.add(task)
             self.services.pop(binding_key)
-
-        xaddr, wsdl_file, binding_name = self.get_definition(name, port_type)
 
         service = ONVIFService(
             xaddr,
