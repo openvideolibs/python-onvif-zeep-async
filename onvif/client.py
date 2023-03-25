@@ -6,12 +6,12 @@ from functools import lru_cache
 import logging
 import os.path
 import ssl
-from typing import Tuple, Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
-from zeep.client import AsyncClient as BaseZeepAsyncClient, Client, Settings
+from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
 from zeep.exceptions import Fault
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
