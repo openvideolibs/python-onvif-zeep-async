@@ -442,7 +442,7 @@ class ONVIFCamera:
             else:
                 # Close the existing service since it's no longer valid.
                 # This can happen when a new PullPointSubscription is created.
-                logger.warning(
+                logger.debug(
                     "Closing service %s with %s", binding_key, existing_service.xaddr
                 )
                 # Hold a reference to the task so it doesn't get
@@ -451,6 +451,8 @@ class ONVIFCamera:
                 task.add_done_callback(self._background_tasks.remove)
                 self._background_tasks.add(task)
             self.services.pop(binding_key)
+
+        logger.debug("Creating service %s with %s", binding_key, xaddr)
 
         service = ONVIFService(
             xaddr,
@@ -463,7 +465,6 @@ class ONVIFCamera:
             binding_name=binding_name,
             binding_key=binding_key,
         )
-        logger.warning("Creating service %s with %s", binding_key, xaddr)
 
         self.services[binding_key] = service
 
