@@ -1,9 +1,11 @@
 """ONVIF Client."""
+import asyncio
 import contextlib
 import datetime as dt
 import logging
 import os.path
 import ssl
+from typing import Tuple, Dict, Optional
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
@@ -132,7 +134,7 @@ class ONVIFService:
     @safe_func
     def __init__(
         self,
-        xaddr,
+        xaddr: str,
         user,
         passwd,
         url,
@@ -281,12 +283,13 @@ class ONVIFCamera:
         self.xaddrs = {}
 
         # Active service client container
-        self.services = {}
+        self.services: Dict[Tuple[str, Optional[str]], ONVIFService] = {}
 
         self.to_dict = ONVIFService.to_dict
 
         self._snapshot_uris = {}
         self._snapshot_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT)
+        self._background_tasks = set()
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
@@ -425,10 +428,23 @@ class ONVIFCamera:
 
         # Don't re-create bindings if the xaddr remains the same.
         # The xaddr can change when a new PullPointSubscription is created.
-        binding_key = f"{binding_name}{xaddr}"
-        binding = self.services.get(binding_key)
-        if binding:
-            return binding
+        binding_key = (name, port_type)
+        existing_service = self.services.get(binding_key)
+        if existing_service:
+            if existing_service.xaddr == xaddr:
+                return existing_service
+            else:
+                # Close the existing service since it's no longer valid.
+                # This can happen when a new PullPointSubscription is created.
+                logger.warning(
+                    "Closing service %s with %s", binding_key, existing_service.xaddr
+                )
+                # Hold a reference to the task so it doesn't get
+                # garbage collected before it completes.
+                task = asyncio.create_task(existing_service.close())
+                task.add_done_callback(self._background_tasks.remove)
+                self._background_tasks.add(task)
+            self.services.pop(binding_key)
 
         service = ONVIFService(
             xaddr,
@@ -441,6 +457,7 @@ class ONVIFCamera:
             binding_name=binding_name,
             binding_key=binding_key,
         )
+        logger.warning("Creating service %s with %s", binding_key, xaddr)
 
         self.services[binding_key] = service
 
