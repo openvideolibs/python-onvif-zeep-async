@@ -298,7 +298,6 @@ class ONVIFCamera:
         self._snapshot_uris = {}
         self._snapshot_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT)
         self._service_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
-        self._background_tasks = set()
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
