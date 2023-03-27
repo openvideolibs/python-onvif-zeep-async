@@ -441,17 +441,6 @@ class ONVIFCamera:
         if existing_service:
             if existing_service.xaddr == xaddr:
                 return existing_service
-            else:
-                # Close the existing service since it's no longer valid.
-                # This can happen when a new PullPointSubscription is created.
-                logger.debug(
-                    "Closing service %s with %s", binding_key, existing_service.xaddr
-                )
-                # Hold a reference to the task so it doesn't get
-                # garbage collected before it completes.
-                task = asyncio.create_task(existing_service.close())
-                task.add_done_callback(self._background_tasks.remove)
-                self._background_tasks.add(task)
             self.services.pop(binding_key)
 
         logger.debug("Creating service %s with %s", binding_key, xaddr)
