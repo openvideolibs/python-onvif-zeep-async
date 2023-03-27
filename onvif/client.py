@@ -17,6 +17,7 @@ import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
 from zeep.wsse.username import UsernameToken
+from zeep.wsa import WsAddressingPlugin
 
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
@@ -170,14 +171,21 @@ class ONVIFService:
         settings.strict = False
         settings.xml_huge_tree = True
         self.zeep_client_authless = ZeepAsyncClient(
-            wsdl=url, transport=self.transport, settings=settings
+            wsdl=url,
+            transport=self.transport,
+            settings=settings,
+            plugins=[WsAddressingPlugin()],
         )
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
         )
 
         self.zeep_client = ZeepAsyncClient(
-            wsdl=url, wsse=wsse, transport=self.transport, settings=settings
+            wsdl=url,
+            wsse=wsse,
+            transport=self.transport,
+            settings=settings,
+            plugins=[WsAddressingPlugin()],
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
 
