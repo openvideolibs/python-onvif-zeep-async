@@ -347,7 +347,9 @@ class ONVIFCamera:
         """Create a pullpoint subscription."""
         try:
             events = self.create_events_service()
-            pullpoint = await events.CreatePullPointSubscription()
+            pullpoint = await events.CreatePullPointSubscription(
+                {"InitialTerminationTime": "PT2H"}
+            )
             # pylint: disable=protected-access
             self.xaddrs[
                 "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
