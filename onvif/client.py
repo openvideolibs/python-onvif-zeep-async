@@ -350,10 +350,15 @@ class ONVIFCamera:
 
     async def create_pullpoint_subscription(self):
         """Create a pullpoint subscription."""
+        termination_time = (
+            (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=1))
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+        )
         try:
             events = self.create_events_service()
             pullpoint = await events.CreatePullPointSubscription(
-                {"InitialTerminationTime": "PT2H"}
+                {"InitialTerminationTime": termination_time}
             )
             # pylint: disable=protected-access
             self.xaddrs[
