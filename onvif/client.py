@@ -30,14 +30,15 @@ logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 def create_no_verify_ssl_context() -> ssl.SSLContext:
     """Return an SSL context that does not verify the server certificate.
     This is a copy of aiohttp's create_default_context() function, with the
-    ssl verify turned off.
+    ssl verify turned off and old SSL versions enabled.
+
     https://github.com/aio-libs/aiohttp/blob/33953f110e97eecc707e1402daa8d543f38a189b/aiohttp/connector.py#L911
     """
     sslcontext = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    sslcontext.options |= ssl.OP_NO_SSLv2
-    sslcontext.options |= ssl.OP_NO_SSLv3
     sslcontext.check_hostname = False
     sslcontext.verify_mode = ssl.CERT_NONE
+    # Allow all ciphers rather than only Python 3.10 default
+    sslcontext.set_ciphers("DEFAULT")
     with contextlib.suppress(AttributeError):
         # This only works for OpenSSL >= 1.0.0
         sslcontext.options |= ssl.OP_NO_COMPRESSION
@@ -145,7 +146,6 @@ class ONVIFService:
         user,
         passwd,
         url,
-        client: AsyncClient,
         encrypt=True,
         no_cache=False,
         dt_diff=None,
@@ -162,11 +162,16 @@ class ONVIFService:
             user, passwd, dt_diff=dt_diff, use_digest=encrypt
         )
         # Create soap client
+        client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        # The wsdl client should never actually be used, but it is required
+        # to avoid creating another ssl context since the underlying code
+        # will try to create a new one if it doesn't exist.
+        wsdl_client = httpx.Client(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
         self.transport = (
-            AsyncTransport(client=client, verify_ssl=_NO_VERIFY_SSL_CONTEXT)
+            AsyncTransport(client=client, wsdl_client=wsdl_client)
             if no_cache
             else AsyncTransport(
-                client=client, verify_ssl=_NO_VERIFY_SSL_CONTEXT, cache=SqliteCache()
+                client=client, wsdl_client=wsdl_client, cache=SqliteCache()
             )
         )
         settings = Settings()
@@ -208,7 +213,7 @@ class ONVIFService:
 
     async def close(self):
         """Close the transport."""
-        # The client is not closed, as it is shared with the camera
+        await self.transport.aclose()
 
     @staticmethod
     @safe_func
@@ -305,7 +310,7 @@ class ONVIFCamera:
 
         self._snapshot_uris = {}
         self._snapshot_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT)
-        self._service_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        self._background_tasks = set()
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
@@ -361,7 +366,8 @@ class ONVIFCamera:
     async def close(self):
         """Close all transports."""
         await self._snapshot_client.aclose()
-        await self._service_client.aclose()
+        for service in self.services.values():
+            await service.close()
 
     async def get_snapshot_uri(self, profile_token):
         """Get the snapshot uri for a given profile."""
@@ -450,6 +456,17 @@ class ONVIFCamera:
         if existing_service:
             if existing_service.xaddr == xaddr:
                 return existing_service
+            else:
+                # Close the existing service since it's no longer valid.
+                # This can happen when a new PullPointSubscription is created.
+                logger.debug(
+                    "Closing service %s with %s", binding_key, existing_service.xaddr
+                )
+                # Hold a reference to the task so it doesn't get
+                # garbage collected before it completes.
+                task = asyncio.create_task(existing_service.close())
+                task.add_done_callback(self._background_tasks.remove)
+                self._background_tasks.add(task)
             self.services.pop(binding_key)
 
         logger.debug("Creating service %s with %s", binding_key, xaddr)
@@ -459,7 +476,6 @@ class ONVIFCamera:
             self.user,
             self.passwd,
             wsdl_file,
-            self._service_client,
             self.encrypt,
             no_cache=self.no_cache,
             dt_diff=self.dt_diff,
