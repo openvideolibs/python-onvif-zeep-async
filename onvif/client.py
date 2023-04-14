@@ -152,6 +152,7 @@ class ONVIFService:
         dt_diff=None,
         binding_name="",
         binding_key="",
+        enable_wsa=False,
     ):
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -173,22 +174,21 @@ class ONVIFService:
         settings = Settings()
         settings.strict = False
         settings.xml_huge_tree = True
-        self.zeep_client_authless = ZeepAsyncClient(
-            wsdl=url,
-            transport=self.transport,
-            settings=settings,
-            plugins=[WsAddressingPlugin()],
-        )
+        zeep_client_args = {
+            "wsdl": url,
+            "transport": self.transport,
+            "settings": settings,
+        }
+        if enable_wsa:
+            zeep_client_args["plugins"] = [WsAddressingPlugin()]
+        self.zeep_client_authless = ZeepAsyncClient(**zeep_client_args)
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
         )
 
         self.zeep_client = ZeepAsyncClient(
-            wsdl=url,
+            **zeep_client_args,
             wsse=wsse,
-            transport=self.transport,
-            settings=settings,
-            plugins=[WsAddressingPlugin()],
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
 
@@ -492,7 +492,7 @@ class ONVIFCamera:
 
     def create_events_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("events")
+        return self.create_onvif_service("events", enable_wsa=True)
 
     def create_analytics_service(self):
         """Service creation helper."""
@@ -512,7 +512,9 @@ class ONVIFCamera:
 
     def create_pullpoint_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("pullpoint", port_type="PullPointSubscription")
+        return self.create_onvif_service(
+            "pullpoint", port_type="PullPointSubscription", enable_wsa=True
+        )
 
     def create_notification_service(self):
         """Service creation helper."""
