@@ -163,10 +163,16 @@ class ONVIFService:
         )
         # Create soap client
         client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        # The wsdl client should never actually be used, but it is required
+        # to avoid creating another ssl context since the underlying code
+        # will try to create a new one if it doesn't exist.
+        wsdl_client = httpx.Client(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
         self.transport = (
-            AsyncTransport(client=client)
+            AsyncTransport(client=client, wsdl_client=wsdl_client)
             if no_cache
-            else AsyncTransport(client=client, cache=SqliteCache())
+            else AsyncTransport(
+                client=client, wsdl_client=wsdl_client, cache=SqliteCache()
+            )
         )
         settings = Settings()
         settings.strict = False
