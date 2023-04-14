@@ -436,7 +436,7 @@ class ONVIFCamera:
 
         return xaddr, wsdlpath, binding_name
 
-    def create_onvif_service(self, name, port_type=None):
+    def create_onvif_service(self, name, port_type=None, enable_wsa: bool = False):
         """Create ONVIF service client"""
         name = name.lower()
         # Don't re-create bindings if the xaddr remains the same.
@@ -464,6 +464,7 @@ class ONVIFCamera:
             dt_diff=self.dt_diff,
             binding_name=binding_name,
             binding_key=binding_key,
+            enable_wsa=enable_wsa,
         )
 
         self.services[binding_key] = service
