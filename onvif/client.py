@@ -6,7 +6,7 @@ from functools import lru_cache
 import logging
 import os.path
 import ssl
-from typing import IO, Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
@@ -14,7 +14,6 @@ from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
 from zeep.exceptions import Fault
 import zeep.helpers
-from zeep.loader import parse_xml
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport, Transport
 from zeep.wsa import WsAddressingPlugin
@@ -92,15 +91,10 @@ class UsernameDigestTokenDtDiff(UsernameToken):
 
 
 class AsyncSafeTransport(Transport):
-    """A transport that blocks all I/O for zeep."""
+    """A transport that blocks all remote I/O for zeep."""
 
     def load(self, url: str) -> None:
-        """Load the given XML document.
-
-        This should never be called, but we want to raise
-        an error if it is so we know we're doing something wrong
-        and do not accidentally block the event loop.
-        """
+        """Load the given XML document."""
         if not _path_isfile(url):
             raise RuntimeError(f"Loading {url} is not supported in async mode")
         # Ideally this would happen in the executor but the library
@@ -113,7 +107,7 @@ class AsyncSafeTransport(Transport):
             return fh.read()
 
 
-_ASYNC_TRANSPORT = AsyncSafeTransport()
+_ASYNC_TRANSPORT = Transport()
 
 
 @lru_cache(maxsize=128)
