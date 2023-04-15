@@ -6,18 +6,19 @@ from functools import lru_cache
 import logging
 import os.path
 import ssl
-from typing import Any, Dict, Optional, Tuple
+from typing import IO, Any, Dict, Optional, Tuple, Union
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
 from zeep.exceptions import Fault
-from zeep.wsdl import Document
 import zeep.helpers
+from zeep.loader import parse_xml
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
 from zeep.wsa import WsAddressingPlugin
+from zeep.wsdl import Document
 from zeep.wsse.username import UsernameToken
 
 from onvif.definition import SERVICES
@@ -26,6 +27,10 @@ from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
+
+_DEFAULT_SETTINGS = Settings()
+_DEFAULT_SETTINGS.strict = False
+_DEFAULT_SETTINGS.xml_huge_tree = True
 
 
 def create_no_verify_ssl_context() -> ssl.SSLContext:
@@ -84,6 +89,41 @@ class UsernameDigestTokenDtDiff(UsernameToken):
         result = super().apply(envelope, headers)
         self.created = old_created
         return result
+
+
+class AsyncSafeTransport:
+    """A transport that blocks all I/O for zeep."""
+
+    def load(self, *args: Any, **kwargs: Any) -> None:
+        """Load the given XML document.
+
+        This should never be called, but we want to raise
+        an error if it is so we know we're doing something wrong
+        and do not accidentally block the event loop.
+        """
+        raise RuntimeError("Loading is not supported in async mode")
+
+
+_ASYNC_TRANSPORT = AsyncSafeTransport()
+
+
+@lru_cache(maxsize=128)
+def _cached_parse_xml(path: str) -> Any:
+    """Load external XML document from disk."""
+    with open(os.path.expanduser(path), "rb") as fh:
+        return parse_xml(fh.read(), _ASYNC_TRANSPORT, settings=_DEFAULT_SETTINGS)
+
+
+class DocumentWithCache(Document):
+    """A WSDL document that supports caching."""
+
+    def _get_xml_document(self, url: Union[IO, str]) -> Any:
+        """Load external XML document from a file-like object or URL."""
+        if _path_isfile(url):
+            return _cached_parse_xml(url)
+        raise RuntimeError(
+            f"Cannot fetch {url} in async mode because it would block the event loop"
+        )
 
 
 class ZeepAsyncClient(BaseZeepAsyncClient):
@@ -175,12 +215,9 @@ class ONVIFService:
                 client=client, wsdl_client=wsdl_client, cache=SqliteCache()
             )
         )
-        settings = Settings()
-        settings.strict = False
-        settings.xml_huge_tree = True
-        wsdl = Document(url, self.transport, settings)
+        settings = _DEFAULT_SETTINGS
         self.zeep_client_authless = ZeepAsyncClient(
-            wsdl=wsdl,
+            wsdl=DocumentWithCache(url, self.transport, settings=settings),
             transport=self.transport,
             settings=settings,
             plugins=[WsAddressingPlugin()],
@@ -188,9 +225,8 @@ class ONVIFService:
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
         )
-
         self.zeep_client = ZeepAsyncClient(
-            wsdl=wsdl,
+            wsdl=DocumentWithCache(url, self.transport, settings=settings),
             wsse=wsse,
             transport=self.transport,
             settings=settings,
