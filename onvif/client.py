@@ -16,8 +16,8 @@ from zeep.exceptions import Fault
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
-from zeep.wsse.username import UsernameToken
 from zeep.wsa import WsAddressingPlugin
+from zeep.wsse.username import UsernameToken
 
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
