@@ -6,7 +6,7 @@ from functools import lru_cache
 import logging
 import os.path
 import ssl
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
@@ -17,8 +17,8 @@ from zeep.wsdl import Document
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
-from zeep.wsse.username import UsernameToken
 from zeep.wsa import WsAddressingPlugin
+from zeep.wsse.username import UsernameToken
 
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
@@ -350,11 +350,13 @@ class ONVIFCamera:
             except Exception:
                 logger.exception("Unexpected service type")
 
-    async def create_pullpoint_subscription(self):
+    async def create_pullpoint_subscription(
+        self, config: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """Create a pullpoint subscription."""
         try:
             events = self.create_events_service()
-            pullpoint = await events.CreatePullPointSubscription()
+            pullpoint = await events.CreatePullPointSubscription(**(config or {}))
             # pylint: disable=protected-access
             self.xaddrs[
                 "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
