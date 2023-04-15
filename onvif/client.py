@@ -16,7 +16,7 @@ from zeep.exceptions import Fault
 import zeep.helpers
 from zeep.loader import parse_xml
 from zeep.proxy import AsyncServiceProxy
-from zeep.transports import AsyncTransport
+from zeep.transports import AsyncTransport, Transport
 from zeep.wsa import WsAddressingPlugin
 from zeep.wsdl import Document
 from zeep.wsse.username import UsernameToken
@@ -91,46 +91,35 @@ class UsernameDigestTokenDtDiff(UsernameToken):
         return result
 
 
-class AsyncSafeTransport:
+class AsyncSafeTransport(Transport):
     """A transport that blocks all I/O for zeep."""
 
-    def load(self, *args: Any, **kwargs: Any) -> None:
+    def load(self, url: str) -> None:
         """Load the given XML document.
 
         This should never be called, but we want to raise
         an error if it is so we know we're doing something wrong
         and do not accidentally block the event loop.
         """
-        raise RuntimeError("Loading is not supported in async mode")
+        if not _path_isfile(url):
+            raise RuntimeError(f"Loading {url} is not supported in async mode")
+        # Ideally this would happen in the executor but the library
+        # does not call this from a coroutine so the best we can do
+        # without a major refactor is to cache this so it only happens
+        # once per process at startup. Previously it would happen once
+        # per service per camera per setup which is a lot of blocking
+        # I/O in the event loop so this is a major improvement.
+        with open(os.path.expanduser(url), "rb") as fh:
+            return fh.read()
 
 
 _ASYNC_TRANSPORT = AsyncSafeTransport()
 
 
-def _cached_parse_xml(path: str) -> Any:
-    """Load external XML document from disk."""
-    with open(os.path.expanduser(path), "rb") as fh:
-        return parse_xml(fh.read(), _ASYNC_TRANSPORT, settings=_DEFAULT_SETTINGS)
-
-
-class DocumentWithAsyncSafeTransport(Document):
-    """A WSDL document that supports caching."""
-
-    def _get_xml_document(self, url: Union[IO, str]) -> Any:
-        """Load external XML document from a file-like object or URL."""
-        if _path_isfile(url):
-            return _cached_parse_xml(url)
-        raise RuntimeError(
-            f"Cannot fetch {url} in async mode because it would block the event loop"
-        )
-
-
 @lru_cache(maxsize=128)
-def _cached_document(url: str) -> DocumentWithAsyncSafeTransport:
+def _cached_document(url: str) -> Document:
     """Load external XML document from disk."""
-    return DocumentWithAsyncSafeTransport(
-        url, _ASYNC_TRANSPORT, settings=_DEFAULT_SETTINGS
-    )
+    return Document(url, _ASYNC_TRANSPORT, settings=_DEFAULT_SETTINGS)
 
 
 class ZeepAsyncClient(BaseZeepAsyncClient):
