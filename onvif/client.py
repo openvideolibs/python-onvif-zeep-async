@@ -13,7 +13,6 @@ from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
 from zeep.exceptions import Fault
-from zeep.wsdl import Document
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
@@ -178,9 +177,8 @@ class ONVIFService:
         settings = Settings()
         settings.strict = False
         settings.xml_huge_tree = True
-        wsdl = Document(url, self.transport, settings)
         self.zeep_client_authless = ZeepAsyncClient(
-            wsdl=wsdl,
+            wsdl=url,
             transport=self.transport,
             settings=settings,
             plugins=[WsAddressingPlugin()],
@@ -190,7 +188,7 @@ class ONVIFService:
         )
 
         self.zeep_client = ZeepAsyncClient(
-            wsdl=wsdl,
+            wsdl=url,
             wsse=wsse,
             transport=self.transport,
             settings=settings,
