@@ -107,14 +107,13 @@ class AsyncSafeTransport:
 _ASYNC_TRANSPORT = AsyncSafeTransport()
 
 
-@lru_cache(maxsize=128)
 def _cached_parse_xml(path: str) -> Any:
     """Load external XML document from disk."""
     with open(os.path.expanduser(path), "rb") as fh:
         return parse_xml(fh.read(), _ASYNC_TRANSPORT, settings=_DEFAULT_SETTINGS)
 
 
-class DocumentWithCache(Document):
+class DocumentWithAsyncSafeTransport(Document):
     """A WSDL document that supports caching."""
 
     def _get_xml_document(self, url: Union[IO, str]) -> Any:
@@ -124,6 +123,14 @@ class DocumentWithCache(Document):
         raise RuntimeError(
             f"Cannot fetch {url} in async mode because it would block the event loop"
         )
+
+
+@lru_cache(maxsize=128)
+def _cached_document(url: str) -> DocumentWithAsyncSafeTransport:
+    """Load external XML document from disk."""
+    return DocumentWithAsyncSafeTransport(
+        url, _ASYNC_TRANSPORT, settings=_DEFAULT_SETTINGS
+    )
 
 
 class ZeepAsyncClient(BaseZeepAsyncClient):
@@ -216,8 +223,9 @@ class ONVIFService:
             )
         )
         settings = _DEFAULT_SETTINGS
+        document = _cached_document(url)
         self.zeep_client_authless = ZeepAsyncClient(
-            wsdl=DocumentWithCache(url, self.transport, settings=settings),
+            wsdl=document,
             transport=self.transport,
             settings=settings,
             plugins=[WsAddressingPlugin()],
@@ -226,7 +234,7 @@ class ONVIFService:
             binding_name, self.xaddr
         )
         self.zeep_client = ZeepAsyncClient(
-            wsdl=DocumentWithCache(url, self.transport, settings=settings),
+            wsdl=document,
             wsse=wsse,
             transport=self.transport,
             settings=settings,
