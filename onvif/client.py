@@ -107,7 +107,7 @@ class AsyncSafeTransport(Transport):
             return fh.read()
 
 
-_ASYNC_TRANSPORT = Transport()
+_ASYNC_TRANSPORT = AsyncSafeTransport()
 
 
 @lru_cache(maxsize=128)
