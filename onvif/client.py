@@ -182,6 +182,7 @@ class ONVIFService:
         dt_diff=None,
         binding_name="",
         binding_key="",
+        webhook_url: Optional[str] = None,
     ):
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -211,7 +212,7 @@ class ONVIFService:
             wsdl=document,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=[WsAddressingPlugin(webhook_url)],
         )
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
@@ -221,7 +222,7 @@ class ONVIFService:
             wsse=wsse,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=[WsAddressingPlugin(webhook_url)],
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
 
@@ -472,7 +473,9 @@ class ONVIFCamera:
 
         return xaddr, wsdlpath, binding_name
 
-    def create_onvif_service(self, name, port_type=None):
+    def create_onvif_service(
+        self, name, port_type=None, webhook_url: Optional[str] = None
+    ):
         """Create ONVIF service client"""
         name = name.lower()
         # Don't re-create bindings if the xaddr remains the same.
@@ -510,6 +513,7 @@ class ONVIFCamera:
             dt_diff=self.dt_diff,
             binding_name=binding_name,
             binding_key=binding_key,
+            webhook_url=webhook_url,
         )
 
         self.services[binding_key] = service
@@ -536,9 +540,9 @@ class ONVIFCamera:
         """Service creation helper."""
         return self.create_onvif_service("deviceio")
 
-    def create_events_service(self):
+    def create_events_service(self, webhook_url: Optional[str] = None):
         """Service creation helper."""
-        return self.create_onvif_service("events")
+        return self.create_onvif_service("events", webhook_url=webhook_url)
 
     def create_analytics_service(self):
         """Service creation helper."""
