@@ -540,7 +540,7 @@ class ONVIFCamera:
         """Service creation helper."""
         return self.create_onvif_service("deviceio")
 
-    def create_events_service(self, webhook_url: Optional[str] = None):
+    def create_events_service(self):
         """Service creation helper."""
         return self.create_onvif_service("events", webhook_url=webhook_url)
 
@@ -564,7 +564,7 @@ class ONVIFCamera:
         """Service creation helper."""
         return self.create_onvif_service("pullpoint", port_type="PullPointSubscription")
 
-    def create_notification_service(self):
+    def create_notification_service(self, webhook_url: Optional[str] = None):
         """Service creation helper."""
         return self.create_onvif_service("notification")
 
