@@ -334,13 +334,13 @@ class NotificationManager:
 
     def process(self, content: bytes) -> Optional[Any]:
         """Process a notification message."""
-        if not self._service:
+        if not self._operation:
             logger.debug("%s: Notifications not setup", self._device.host)
             return
         try:
             envelope = parse_xml(
                 content,  # type: ignore[arg-type]
-                self._service.transport,
+                _ASYNC_TRANSPORT,
                 settings=_DEFAULT_SETTINGS,
             )
         except XMLSyntaxError as exc:
