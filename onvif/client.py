@@ -302,7 +302,7 @@ class NotificationProcessor:
 
     async def start(self) -> None:
         """Start the notification processor."""
-        notify_service = self.create_notification_service()
+        notify_service = self._device.create_notification_service()
         notify_subscribe = await notify_service.Subscribe(self._config)
         # pylint: disable=protected-access
         self._device.xaddrs[
