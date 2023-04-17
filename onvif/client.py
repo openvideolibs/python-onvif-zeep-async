@@ -457,7 +457,6 @@ class ONVIFCamera:
             "pullpoint", port_type="NotificationConsumer"
         )
         processor = NotificationProcessor(pullpoint)
-        await processor.start()
         return NotificationSubscription(subscription, processor)
 
     async def close(self):
