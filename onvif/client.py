@@ -346,15 +346,9 @@ class NotificationManager:
         return operation.process_reply(doc)
 
 
-@dataclass
-class NotificationSubscription:
-    service: ONVIFService
-    processor: NotificationProcessor
-
-
 class ONVIFCamera:
     """
-    Python Implemention ONVIF compliant device
+    Python Implementation ONVIF compliant device
     This class integrates onvif services
 
     adjust_time parameter allows authentication on cameras without being time synchronized.
@@ -462,7 +456,7 @@ class ONVIFCamera:
     ) -> NotificationManager:
         """Create a notification manager."""
         return NotificationManager(self, config)
-    
+
     async def close(self):
         """Close all transports."""
         await self._snapshot_client.aclose()
