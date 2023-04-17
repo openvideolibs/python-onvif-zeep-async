@@ -19,6 +19,7 @@ from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport, Transport
 from zeep.wsa import WsAddressingPlugin
 from zeep.wsdl import Document
+from zeep.wsdl.bindings.soap import SoapOperation
 from zeep.wsse.username import UsernameToken
 
 from onvif.definition import SERVICES
@@ -207,9 +208,10 @@ class ONVIFService:
             )
         )
         settings = _DEFAULT_SETTINGS
-        document = _cached_document(url)
+        self.document = _cached_document(url)
+        self.binding_name = binding_name
         self.zeep_client_authless = ZeepAsyncClient(
-            wsdl=document,
+            wsdl=self.document,
             transport=self.transport,
             settings=settings,
             plugins=[WsAddressingPlugin()],
@@ -218,7 +220,7 @@ class ONVIFService:
             binding_name, self.xaddr
         )
         self.zeep_client = ZeepAsyncClient(
-            wsdl=document,
+            wsdl=self.document,
             wsse=wsse,
             transport=self.transport,
             settings=settings,
@@ -294,6 +296,7 @@ class NotificationManager:
     def __init__(self, device: "ONVIFCamera", config: Dict[str, Any]) -> None:
         """Initialize the notification processor."""
         self._service: Optional[ONVIFService] = None
+        self._operation: Optional[SoapOperation] = None
         self._device = device
         self._config = config
 
@@ -312,9 +315,13 @@ class NotificationManager:
         #
         # If this fails this is OK as it just means we will switch
         # to webhook later when the first notification is received.
-        self._service = self._device.create_onvif_service(
+        service = self._device.create_onvif_service(
             "pullpoint", port_type="NotificationConsumer"
         )
+        self._operation = service.document.bindings[service.binding_name].get(
+            "PullMessages"
+        )
+        self._service = service
         return self._device.create_subscription_service("NotificationConsumer")
 
     async def start(self) -> None:
@@ -331,7 +338,7 @@ class NotificationManager:
             logger.debug("%s: Notifications not setup", self._device.host)
             return
         try:
-            doc = parse_xml(
+            envelope = parse_xml(
                 content,  # type: ignore[arg-type]
                 self._service.transport,
                 settings=_DEFAULT_SETTINGS,
@@ -339,14 +346,7 @@ class NotificationManager:
         except XMLSyntaxError as exc:
             logger.error("Received invalid XML: %s", exc)
             return None
-
-        async_operation_proxy = self._service.ws_client.PullMessages
-        op_name = async_operation_proxy._op_name  # pylint: disable=protected-access
-        binding = (
-            async_operation_proxy._proxy._binding  # pylint: disable=protected-access
-        )
-        operation = binding.get(op_name)
-        return operation.process_reply(doc)
+        return self._operation.process_reply(envelope)
 
 
 class ONVIFCamera:
