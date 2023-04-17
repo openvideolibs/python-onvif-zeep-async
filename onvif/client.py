@@ -1,7 +1,6 @@
 """ONVIF Client."""
 import asyncio
 import contextlib
-from dataclasses import dataclass
 import datetime as dt
 from functools import lru_cache
 import logging
