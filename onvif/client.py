@@ -309,7 +309,7 @@ class NotificationProcessor:
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
 
-    async def process(self, content: bytes) -> None:
+    def process(self, content: bytes) -> Optional[Any]:
         """Process a notification message."""
         try:
             doc = parse_xml(
@@ -319,7 +319,7 @@ class NotificationProcessor:
             )
         except XMLSyntaxError as exc:
             logger.error("Received invalid XML: %s", exc)
-            return
+            return None
 
         async_operation_proxy = self._service.ws_client.PullMessages
         op_name = async_operation_proxy._op_name  # pylint: disable=protected-access
