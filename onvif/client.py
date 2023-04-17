@@ -452,15 +452,15 @@ class ONVIFCamera:
             return False
         return True
 
-    async def create_notification_subscription(
+    def create_notification_subscription(
         self, config: Optional[Dict[str, Any]] = None
     ) -> NotificationSubscription:
         """Create a notification subscription."""
         return NotificationSubscription(
             self.create_subscription_service("NotificationConsumer"),
-            NotificationProcessor(self),
+            NotificationProcessor(self, config),
         )
-
+    
     async def close(self):
         """Close all transports."""
         await self._snapshot_client.aclose()
