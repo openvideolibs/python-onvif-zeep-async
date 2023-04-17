@@ -292,12 +292,23 @@ class ONVIFService:
 class NotificationProcessor:
     """Process notifications."""
 
-    def __init__(self, service: ONVIFService) -> None:
+    def __init__(self, device: "ONVIFCamera", config: Dict[str, Any]) -> None:
         """Initialize the notification processor."""
-        self._service = service
+        self._service = device.create_onvif_service(
+            "pullpoint", port_type="NotificationConsumer"
+        )
+        self._device = device
+        self._config = config
 
     async def start(self) -> None:
         """Start the notification processor."""
+        notify_service = self.create_notification_service()
+        notify_subscribe = await notify_service.Subscribe(self._config)
+        # pylint: disable=protected-access
+        self._device.xaddrs[
+            "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
+        ] = notify_subscribe.SubscriptionReference.Address._value_1
+        # Create subscription manager
         # 5.2.3 BASIC NOTIFICATION INTERFACE - NOTIFY
         # Call SetSynchronizationPoint to generate a notification message
         # to ensure the webhooks are working.
@@ -445,19 +456,10 @@ class ONVIFCamera:
         self, config: Optional[Dict[str, Any]] = None
     ) -> NotificationSubscription:
         """Create a notification subscription."""
-        notify_service = self.create_notification_service()
-        notify_subscribe = await notify_service.Subscribe(config)
-        # pylint: disable=protected-access
-        self.xaddrs[
-            "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
-        ] = notify_subscribe.SubscriptionReference.Address._value_1
-        # Create subscription manager
-        subscription = self.create_subscription_service("NotificationConsumer")
-        pullpoint = self.create_onvif_service(
-            "pullpoint", port_type="NotificationConsumer"
+        return NotificationSubscription(
+            self.create_subscription_service("NotificationConsumer"),
+            NotificationProcessor(self),
         )
-        processor = NotificationProcessor(pullpoint)
-        return NotificationSubscription(subscription, processor)
 
     async def close(self):
         """Close all transports."""
