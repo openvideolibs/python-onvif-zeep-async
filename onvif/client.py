@@ -1,6 +1,7 @@
 """ONVIF Client."""
 import asyncio
 import contextlib
+from dataclasses import dataclass
 import datetime as dt
 from functools import lru_cache
 import logging
@@ -9,11 +10,12 @@ import ssl
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
-from httpx import AsyncClient, BasicAuth, DigestAuth
+from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
 from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
-from zeep.exceptions import Fault
+from zeep.exceptions import Fault, XMLSyntaxError
 import zeep.helpers
+from zeep.loader import parse_xml
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport, Transport
 from zeep.wsa import WsAddressingPlugin
@@ -287,6 +289,53 @@ class ONVIFService:
         return service_wrapper(getattr(self.ws_client, name))
 
 
+class NotificationProcessor:
+    """Process notifications."""
+
+    def __init__(self, service: ONVIFService) -> None:
+        """Initialize the notification processor."""
+        self._service = service
+
+    async def start(self) -> None:
+        """Start the notification processor."""
+        # 5.2.3 BASIC NOTIFICATION INTERFACE - NOTIFY
+        # Call SetSynchronizationPoint to generate a notification message
+        # to ensure the webhooks are working.
+        #
+        # If this fails this is OK as it just means we will switch
+        # to webhook later when the first notification is received.
+        try:
+            await self._service.SetSynchronizationPoint()
+        except (Fault, asyncio.TimeoutError, TransportError, TypeError):
+            logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
+
+    async def process(self, content: bytes) -> None:
+        """Process a notification message."""
+        try:
+            doc = parse_xml(
+                content,  # type: ignore[arg-type]
+                self._service.transport,
+                settings=_DEFAULT_SETTINGS,
+            )
+        except XMLSyntaxError as exc:
+            logger.error("Received invalid XML: %s", exc)
+            return
+
+        async_operation_proxy = self._service.ws_client.PullMessages
+        op_name = async_operation_proxy._op_name  # pylint: disable=protected-access
+        binding = (
+            async_operation_proxy._proxy._binding  # pylint: disable=protected-access
+        )
+        operation = binding.get(op_name)
+        return operation.process_reply(doc)
+
+
+@dataclass
+class NotificationSubscription:
+    service: ONVIFService
+    processor: NotificationProcessor
+
+
 class ONVIFCamera:
     """
     Python Implemention ONVIF compliant device
@@ -391,6 +440,25 @@ class ONVIFCamera:
         except Fault:
             return False
         return True
+
+    async def create_notification_subscription(
+        self, config: Optional[Dict[str, Any]] = None
+    ) -> NotificationSubscription:
+        """Create a notification subscription."""
+        notify_service = self.create_notification_service()
+        notify_subscribe = await notify_service.Subscribe(config)
+        # pylint: disable=protected-access
+        self.xaddrs[
+            "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
+        ] = notify_subscribe.SubscriptionReference.Address._value_1
+        # Create subscription manager
+        subscription = self.create_subscription_service("NotificationConsumer")
+        pullpoint = self.create_onvif_service(
+            "pullpoint", port_type="NotificationConsumer"
+        )
+        processor = NotificationProcessor(pullpoint)
+        await processor.start()
+        return NotificationSubscription(subscription, processor)
 
     async def close(self):
         """Close all transports."""
