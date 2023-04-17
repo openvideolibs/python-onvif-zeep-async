@@ -297,8 +297,8 @@ class NotificationManager:
         self._device = device
         self._config = config
 
-    async def start(self) -> ONVIFService:
-        """Start the notification processor."""
+    async def setup(self) -> ONVIFService:
+        """Setup the notification processor."""
         notify_service = self._device.create_notification_service()
         notify_subscribe = await notify_service.Subscribe(self._config)
         # pylint: disable=protected-access
@@ -315,16 +315,20 @@ class NotificationManager:
         self._service = self._device.create_onvif_service(
             "pullpoint", port_type="NotificationConsumer"
         )
+        return self._device.create_subscription_service("NotificationConsumer")
+
+    async def start(self) -> None:
+        """Start the notification processor."""
+        assert self._service, "Call setup first"
         try:
             await self._service.SetSynchronizationPoint()
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
-        return self._device.create_subscription_service("NotificationConsumer")
 
     def process(self, content: bytes) -> Optional[Any]:
         """Process a notification message."""
         if not self._service:
-            logger.debug("%s: Notifications not started", self._device.host)
+            logger.debug("%s: Notifications not setup", self._device.host)
             return
         try:
             doc = parse_xml(
