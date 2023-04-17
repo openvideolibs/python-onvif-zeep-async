@@ -289,18 +289,16 @@ class ONVIFService:
         return service_wrapper(getattr(self.ws_client, name))
 
 
-class NotificationProcessor:
-    """Process notifications."""
+class NotificationManager:
+    """Manager to process notifications."""
 
     def __init__(self, device: "ONVIFCamera", config: Dict[str, Any]) -> None:
         """Initialize the notification processor."""
-        self._service = device.create_onvif_service(
-            "pullpoint", port_type="NotificationConsumer"
-        )
+        self._service: Optional[ONVIFService] = None
         self._device = device
         self._config = config
 
-    async def start(self) -> None:
+    async def start(self) -> ONVIFService:
         """Start the notification processor."""
         notify_service = self._device.create_notification_service()
         notify_subscribe = await notify_service.Subscribe(self._config)
@@ -315,13 +313,20 @@ class NotificationProcessor:
         #
         # If this fails this is OK as it just means we will switch
         # to webhook later when the first notification is received.
+        self._service = self._device.create_onvif_service(
+            "pullpoint", port_type="NotificationConsumer"
+        )
         try:
             await self._service.SetSynchronizationPoint()
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
+        return self._device.create_subscription_service("NotificationConsumer")
 
     def process(self, content: bytes) -> Optional[Any]:
         """Process a notification message."""
+        if not self._service:
+            logger.debug("%s: Notifications not started", self._device.host)
+            return
         try:
             doc = parse_xml(
                 content,  # type: ignore[arg-type]
@@ -452,14 +457,11 @@ class ONVIFCamera:
             return False
         return True
 
-    def create_notification_subscription(
+    def create_notification_manager(
         self, config: Optional[Dict[str, Any]] = None
-    ) -> NotificationSubscription:
-        """Create a notification subscription."""
-        return NotificationSubscription(
-            self.create_subscription_service("NotificationConsumer"),
-            NotificationProcessor(self, config),
-        )
+    ) -> NotificationManager:
+        """Create a notification manager."""
+        return NotificationManager(self, config)
     
     async def close(self):
         """Close all transports."""
