@@ -33,7 +33,9 @@ _DEFAULT_SETTINGS = Settings()
 _DEFAULT_SETTINGS.strict = False
 _DEFAULT_SETTINGS.xml_huge_tree = True
 
-DEFAULT_TIMEOUT = 30
+# Some cameras take a long time to respond so we set the timeout to 40s
+DEFAULT_TIMEOUT = 40
+# For pullpoint we do a long poll so we need a longer timeout
 PULL_POINT_TIMEOUT = 90
 
 
