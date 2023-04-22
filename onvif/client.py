@@ -33,6 +33,9 @@ _DEFAULT_SETTINGS = Settings()
 _DEFAULT_SETTINGS.strict = False
 _DEFAULT_SETTINGS.xml_huge_tree = True
 
+DEFAULT_TIMEOUT = 30
+PULL_POINT_TIMEOUT = 90
+
 
 def create_no_verify_ssl_context() -> ssl.SSLContext:
     """Return an SSL context that does not verify the server certificate.
@@ -184,7 +187,9 @@ class ONVIFService:
         dt_diff=None,
         binding_name="",
         binding_key="",
-    ):
+        enable_wsa=False,
+        timeout=DEFAULT_TIMEOUT,
+    ) -> None:
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
 
@@ -195,11 +200,11 @@ class ONVIFService:
             user, passwd, dt_diff=dt_diff, use_digest=encrypt
         )
         # Create soap client
-        client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeout)
         # The wsdl client should never actually be used, but it is required
         # to avoid creating another ssl context since the underlying code
         # will try to create a new one if it doesn't exist.
-        wsdl_client = httpx.Client(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        wsdl_client = httpx.Client(verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeout)
         self.transport = (
             AsyncTransport(client=client, wsdl_client=wsdl_client)
             if no_cache
@@ -207,6 +212,7 @@ class ONVIFService:
                 client=client, wsdl_client=wsdl_client, cache=SqliteCache()
             )
         )
+        plugins = [WsAddressingPlugin()] if enable_wsa else []
         settings = _DEFAULT_SETTINGS
         self.document = _cached_document(url)
         self.binding_name = binding_name
@@ -214,7 +220,7 @@ class ONVIFService:
             wsdl=self.document,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=plugins,
         )
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
@@ -224,7 +230,7 @@ class ONVIFService:
             wsse=wsse,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=plugins,
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
 
@@ -540,7 +546,9 @@ class ONVIFCamera:
 
         return xaddr, wsdlpath, binding_name
 
-    def create_onvif_service(self, name, port_type=None):
+    def create_onvif_service(
+        self, name, port_type=None, enable_wsa=False, timeout=DEFAULT_TIMEOUT
+    ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
         # Don't re-create bindings if the xaddr remains the same.
@@ -578,6 +586,8 @@ class ONVIFCamera:
             dt_diff=self.dt_diff,
             binding_name=binding_name,
             binding_key=binding_key,
+            enable_wsa=enable_wsa,
+            timeout=timeout,
         )
 
         self.services[binding_key] = service
@@ -606,7 +616,7 @@ class ONVIFCamera:
 
     def create_events_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("events")
+        return self.create_onvif_service("events", enable_wsa=True)
 
     def create_analytics_service(self):
         """Service creation helper."""
@@ -626,15 +636,22 @@ class ONVIFCamera:
 
     def create_pullpoint_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("pullpoint", port_type="PullPointSubscription")
+        return self.create_onvif_service(
+            "pullpoint",
+            port_type="PullPointSubscription",
+            enable_wsa=True,
+            timeout=PULL_POINT_TIMEOUT,
+        )
 
     def create_notification_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("notification")
+        return self.create_onvif_service("notification", enable_wsa=True)
 
     def create_subscription_service(self, port_type=None):
         """Service creation helper."""
-        return self.create_onvif_service("subscription", port_type=port_type)
+        return self.create_onvif_service(
+            "subscription", port_type=port_type, enable_wsa=True
+        )
 
     def create_receiver_service(self):
         """Service creation helper."""
