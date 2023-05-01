@@ -445,7 +445,7 @@ class ONVIFCamera:
                     self.xaddrs[namespace] = capability["XAddr"]
             except Exception:
                 logger.exception("Unexpected service type")
-        self._capabilities = dict(capabilities)
+        self._capabilities = self.to_dict(capabilities)
 
     async def create_pullpoint_subscription(
         self, config: Optional[Dict[str, Any]] = None
