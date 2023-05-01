@@ -393,6 +393,7 @@ class ONVIFCamera:
         self.adjust_time = adjust_time
         self.dt_diff = None
         self.xaddrs = {}
+        self._capabilities: Optional[Dict[str, Any]] = None
 
         # Active service client container
         self.services: Dict[Tuple[str, Optional[str]], ONVIFService] = {}
@@ -402,6 +403,12 @@ class ONVIFCamera:
         self._snapshot_uris = {}
         self._snapshot_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT)
         self._background_tasks = set()
+
+    async def get_capabilities(self) -> Dict[str, Any]:
+        """Get device capabilities."""
+        if self._capabilities is None:
+            await self.update_xaddrs()
+        return self._capabilities
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
@@ -438,6 +445,10 @@ class ONVIFCamera:
                     self.xaddrs[namespace] = capability["XAddr"]
             except Exception:
                 logger.exception("Unexpected service type")
+        try:
+            self._capabilities = self.to_dict(capabilities)
+        except Exception:
+            logger.exception("Failed to parse capabilities")
 
     async def create_pullpoint_subscription(
         self, config: Optional[Dict[str, Any]] = None
