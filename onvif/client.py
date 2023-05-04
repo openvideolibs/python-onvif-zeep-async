@@ -582,7 +582,11 @@ class ONVIFCamera:
         return xaddr, wsdlpath, binding_name
 
     async def create_onvif_service(
-        self, name: str, port_type: Optional[str] = None
+        self,
+        name: str,
+        port_type: Optional[str] = None,
+        read_timeout: Optional[int] = None,
+        write_timeout: Optional[int] = None,
     ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
@@ -619,6 +623,8 @@ class ONVIFCamera:
             dt_diff=self.dt_diff,
             binding_name=binding_name,
             binding_key=binding_key,
+            read_timeout=read_timeout,
+            write_timeout=write_timeout,
         )
         await service.setup()
 
