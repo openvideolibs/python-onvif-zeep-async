@@ -734,15 +734,13 @@ class ONVIFCamera:
         """Service creation helper."""
         return await self.create_onvif_service("replay")
 
-    async def create_pullpoint_service(
-        self, read_timeout: Optional[int] = None, write_timeout: Optional[int] = None
-    ) -> ONVIFService:
+    async def create_pullpoint_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service(
             "pullpoint",
             port_type="PullPointSubscription",
-            read_timeout=read_timeout or _PULLPOINT_TIMEOUT,
-            write_timeout=write_timeout or _PULLPOINT_TIMEOUT,
+            read_timeout=_PULLPOINT_TIMEOUT,
+            write_timeout=_PULLPOINT_TIMEOUT,
         )
 
     async def create_notification_service(self) -> ONVIFService:
