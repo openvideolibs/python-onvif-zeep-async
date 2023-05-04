@@ -35,6 +35,12 @@ _DEFAULT_SETTINGS.xml_huge_tree = True
 
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
 
+_DEFAULT_TIMEOUT = 30
+_PULLPOINT_TIMEOUT = 90
+_CONNECT_TIMEOUT = 30
+_READ_TIMEOUT = 30
+_WRITE_TIMEOUT = 30
+
 
 def create_no_verify_ssl_context() -> ssl.SSLContext:
     """Return an SSL context that does not verify the server certificate.
@@ -186,6 +192,8 @@ class ONVIFService:
         dt_diff=None,
         binding_name="",
         binding_key="",
+        read_timeout: Optional[int] = None,
+        write_timeout: Optional[int] = None,
     ) -> None:
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -201,11 +209,17 @@ class ONVIFService:
         self.dt_diff = dt_diff
         self.binding_name = binding_name
         # Create soap client
-        client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        timeouts = httpx.Timeout(
+            _DEFAULT_TIMEOUT,
+            connect=_CONNECT_TIMEOUT,
+            read=read_timeout or _READ_TIMEOUT,
+            write=write_timeout or _WRITE_TIMEOUT,
+        )
+        client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts)
         # The wsdl client should never actually be used, but it is required
         # to avoid creating another ssl context since the underlying code
         # will try to create a new one if it doesn't exist.
-        wsdl_client = httpx.Client(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        wsdl_client = httpx.Client(verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts)
         self.transport = (
             AsyncTransport(client=client, wsdl_client=wsdl_client)
             if no_cache
@@ -483,13 +497,13 @@ class ONVIFCamera:
         """Create a notification manager."""
         return NotificationManager(self, config)
 
-    async def close(self):
+    async def close(self) -> None:
         """Close all transports."""
         await self._snapshot_client.aclose()
         for service in self.services.values():
             await service.close()
 
-    async def get_snapshot_uri(self, profile_token):
+    async def get_snapshot_uri(self, profile_token: str) -> str:
         """Get the snapshot uri for a given profile."""
         uri = self._snapshot_uris.get(profile_token)
         if uri is None:
@@ -501,7 +515,9 @@ class ONVIFCamera:
             self._snapshot_uris[profile_token] = uri
         return uri
 
-    async def get_snapshot(self, profile_token, basic_auth=False):
+    async def get_snapshot(
+        self, profile_token: str, basic_auth: bool = False
+    ) -> Optional[bytes]:
         """Get a snapshot image from the camera."""
         uri = await self.get_snapshot_uri(profile_token)
         if uri is None:
@@ -610,60 +626,67 @@ class ONVIFCamera:
 
         return service
 
-    async def create_devicemgmt_service(self):
+    async def create_devicemgmt_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("devicemgmt")
 
-    async def create_media_service(self):
+    async def create_media_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("media")
 
-    async def create_ptz_service(self):
+    async def create_ptz_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("ptz")
 
-    async def create_imaging_service(self):
+    async def create_imaging_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("imaging")
 
-    async def create_deviceio_service(self):
+    async def create_deviceio_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("deviceio")
 
-    async def create_events_service(self):
+    async def create_events_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("events")
 
-    async def create_analytics_service(self):
+    async def create_analytics_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("analytics")
 
-    async def create_recording_service(self):
+    async def create_recording_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("recording")
 
-    async def create_search_service(self):
+    async def create_search_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("search")
 
-    async def create_replay_service(self):
+    async def create_replay_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("replay")
 
-    async def create_pullpoint_service(self):
+    async def create_pullpoint_service(
+        self, read_timeout: Optional[int] = None, write_timeout: Optional[int] = None
+    ) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service(
-            "pullpoint", port_type="PullPointSubscription"
+            "pullpoint",
+            port_type="PullPointSubscription",
+            read_timeout=read_timeout or _PULLPOINT_TIMEOUT,
+            write_timeout=write_timeout or _PULLPOINT_TIMEOUT,
         )
 
-    async def create_notification_service(self):
+    async def create_notification_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("notification")
 
-    async def create_subscription_service(self, port_type=None):
+    async def create_subscription_service(
+        self, port_type: Optional[str] = None
+    ) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("subscription", port_type=port_type)
 
-    async def create_receiver_service(self):
+    async def create_receiver_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("receiver")
