@@ -6,7 +6,7 @@ from functools import lru_cache
 import logging
 import os.path
 import ssl
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
@@ -32,6 +32,8 @@ logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 _DEFAULT_SETTINGS = Settings()
 _DEFAULT_SETTINGS.strict = False
 _DEFAULT_SETTINGS.xml_huge_tree = True
+
+_WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
 
 
 def create_no_verify_ssl_context() -> ssl.SSLContext:
@@ -176,24 +178,28 @@ class ONVIFService:
     def __init__(
         self,
         xaddr: str,
-        user,
-        passwd,
-        url,
+        user: Optional[str],
+        passwd: Optional[str],
+        url: str,
         encrypt=True,
         no_cache=False,
         dt_diff=None,
         binding_name="",
         binding_key="",
-    ):
+    ) -> None:
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
 
         self.url = url
         self.xaddr = xaddr
         self.binding_key = binding_key
-        wsse = UsernameDigestTokenDtDiff(
-            user, passwd, dt_diff=dt_diff, use_digest=encrypt
-        )
+        # Set soap header for authentication
+        self.user = user
+        self.passwd = passwd
+        # Indicate wether password digest is needed
+        self.encrypt = encrypt
+        self.dt_diff = dt_diff
+        self.binding_name = binding_name
         # Create soap client
         client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
         # The wsdl client should never actually be used, but it is required
@@ -207,9 +213,24 @@ class ONVIFService:
                 client=client, wsdl_client=wsdl_client, cache=SqliteCache()
             )
         )
+        self.document: Optional[Document] = None
+        self.zeep_client_authless: Optional[ZeepAsyncClient] = None
+        self.ws_client_authless: Optional[AsyncServiceProxy] = None
+        self.zeep_client: Optional[ZeepAsyncClient] = None
+        self.ws_client: Optional[AsyncServiceProxy] = None
+        self.create_type: Optional[Callable] = None
+        self.loop = asyncio.get_event_loop()
+
+    async def setup(self):
+        """Setup the transport."""
         settings = _DEFAULT_SETTINGS
-        self.document = _cached_document(url)
-        self.binding_name = binding_name
+        binding_name = self.binding_name
+        wsse = UsernameDigestTokenDtDiff(
+            self.user, self.passwd, dt_diff=self.dt_diff, use_digest=self.encrypt
+        )
+        self.document = await self.loop.run_in_executor(
+            None, _cached_document, self.url
+        )
         self.zeep_client_authless = ZeepAsyncClient(
             wsdl=self.document,
             transport=self.transport,
@@ -227,14 +248,6 @@ class ONVIFService:
             plugins=[WsAddressingPlugin()],
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
-
-        # Set soap header for authentication
-        self.user = user
-        self.passwd = passwd
-        # Indicate wether password digest is needed
-        self.encrypt = encrypt
-        self.dt_diff = dt_diff
-
         namespace = binding_name[binding_name.find("{") + 1 : binding_name.find("}")]
         available_ns = self.zeep_client.namespaces
         active_ns = (
@@ -302,7 +315,7 @@ class NotificationManager:
 
     async def setup(self) -> ONVIFService:
         """Setup the notification processor."""
-        notify_service = self._device.create_notification_service()
+        notify_service = await self._device.create_notification_service()
         notify_subscribe = await notify_service.Subscribe(self._config)
         # pylint: disable=protected-access
         self._device.xaddrs[
@@ -315,14 +328,14 @@ class NotificationManager:
         #
         # If this fails this is OK as it just means we will switch
         # to webhook later when the first notification is received.
-        service = self._device.create_onvif_service(
+        service = await self._device.create_onvif_service(
             "pullpoint", port_type="NotificationConsumer"
         )
         self._operation = service.document.bindings[service.binding_name].get(
             "PullMessages"
         )
         self._service = service
-        return self._device.create_subscription_service("NotificationConsumer")
+        return await self._device.create_subscription_service("NotificationConsumer")
 
     async def start(self) -> None:
         """Start the notification processor."""
@@ -372,15 +385,15 @@ class ONVIFCamera:
 
     def __init__(
         self,
-        host,
-        port,
-        user,
-        passwd,
-        wsdl_dir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl"),
+        host: str,
+        port: int,
+        user: Optional[str],
+        passwd: Optional[str],
+        wsdl_dir: str = _WSDL_PATH,
         encrypt=True,
         no_cache=False,
         adjust_time=False,
-    ):
+    ) -> None:
         os.environ.pop("http_proxy", None)
         os.environ.pop("https_proxy", None)
         self.host = host
@@ -402,7 +415,6 @@ class ONVIFCamera:
 
         self._snapshot_uris = {}
         self._snapshot_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT)
-        self._background_tasks = set()
 
     async def get_capabilities(self) -> Dict[str, Any]:
         """Get device capabilities."""
@@ -413,7 +425,7 @@ class ONVIFCamera:
     async def update_xaddrs(self):
         """Update xaddrs for services."""
         self.dt_diff = None
-        devicemgmt = self.create_devicemgmt_service()
+        devicemgmt = await self.create_devicemgmt_service()
         if self.adjust_time:
             try:
                 sys_date = await devicemgmt.authless_GetSystemDateAndTime()
@@ -432,7 +444,7 @@ class ONVIFCamera:
             self.dt_diff = cam_date - dt.datetime.utcnow()
             await devicemgmt.close()
             del self.services[devicemgmt.binding_key]
-            devicemgmt = self.create_devicemgmt_service()
+            devicemgmt = await self.create_devicemgmt_service()
 
         # Get XAddr of services on the device
         self.xaddrs = {}
@@ -455,7 +467,7 @@ class ONVIFCamera:
     ) -> bool:
         """Create a pullpoint subscription."""
         try:
-            events = self.create_events_service()
+            events = await self.create_events_service()
             pullpoint = await events.CreatePullPointSubscription(config or {})
             # pylint: disable=protected-access
             self.xaddrs[
@@ -481,7 +493,7 @@ class ONVIFCamera:
         """Get the snapshot uri for a given profile."""
         uri = self._snapshot_uris.get(profile_token)
         if uri is None:
-            media_service = self.create_media_service()
+            media_service = await self.create_media_service()
             req = media_service.create_type("GetSnapshotUri")
             req.ProfileToken = profile_token
             result = await media_service.GetSnapshotUri(req)
@@ -517,7 +529,9 @@ class ONVIFCamera:
 
         return None
 
-    def get_definition(self, name, port_type=None):
+    def get_definition(
+        self, name: str, port_type: Optional[str] = None
+    ) -> Tuple[str, str, str]:
         """Returns xaddr and wsdl of specified service"""
         # Check if the service is supported
         if name not in SERVICES:
@@ -551,7 +565,9 @@ class ONVIFCamera:
 
         return xaddr, wsdlpath, binding_name
 
-    def create_onvif_service(self, name, port_type=None):
+    async def create_onvif_service(
+        self, name: str, port_type: Optional[str] = None
+    ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
         # Don't re-create bindings if the xaddr remains the same.
@@ -572,9 +588,7 @@ class ONVIFCamera:
                 )
                 # Hold a reference to the task so it doesn't get
                 # garbage collected before it completes.
-                task = asyncio.create_task(existing_service.close())
-                task.add_done_callback(self._background_tasks.remove)
-                self._background_tasks.add(task)
+                await existing_service.close()
             self.services.pop(binding_key)
 
         logger.debug("Creating service %s with %s", binding_key, xaddr)
@@ -590,63 +604,66 @@ class ONVIFCamera:
             binding_name=binding_name,
             binding_key=binding_key,
         )
+        await service.setup()
 
         self.services[binding_key] = service
 
         return service
 
-    def create_devicemgmt_service(self):
+    async def create_devicemgmt_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("devicemgmt")
+        return await self.create_onvif_service("devicemgmt")
 
-    def create_media_service(self):
+    async def create_media_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("media")
+        return await self.create_onvif_service("media")
 
-    def create_ptz_service(self):
+    async def create_ptz_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("ptz")
+        return await self.create_onvif_service("ptz")
 
-    def create_imaging_service(self):
+    async def create_imaging_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("imaging")
+        return await self.create_onvif_service("imaging")
 
-    def create_deviceio_service(self):
+    async def create_deviceio_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("deviceio")
+        return await self.create_onvif_service("deviceio")
 
-    def create_events_service(self):
+    async def create_events_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("events")
+        return await self.create_onvif_service("events")
 
-    def create_analytics_service(self):
+    async def create_analytics_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("analytics")
+        return await self.create_onvif_service("analytics")
 
-    def create_recording_service(self):
+    async def create_recording_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("recording")
+        return await self.create_onvif_service("recording")
 
-    def create_search_service(self):
+    async def create_search_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("search")
+        return await self.create_onvif_service("search")
 
-    def create_replay_service(self):
+    async def create_replay_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("replay")
+        return await self.create_onvif_service("replay")
 
-    def create_pullpoint_service(self):
+    async def create_pullpoint_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("pullpoint", port_type="PullPointSubscription")
+        return await self.create_onvif_service(
+            "pullpoint", port_type="PullPointSubscription"
+        )
 
-    def create_notification_service(self):
+    async def create_notification_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("notification")
+        return await self.create_onvif_service("notification")
 
-    def create_subscription_service(self, port_type=None):
+    async def create_subscription_service(self, port_type=None):
         """Service creation helper."""
-        return self.create_onvif_service("subscription", port_type=port_type)
+        return await self.create_onvif_service("subscription", port_type=port_type)
 
-    def create_receiver_service(self):
+    async def create_receiver_service(self):
         """Service creation helper."""
-        return self.create_onvif_service("receiver")
+        return await self.create_onvif_service("receiver")
