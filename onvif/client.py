@@ -6,7 +6,7 @@ from functools import lru_cache
 import logging
 import os.path
 import ssl
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Optional, ParamSpec, Tuple, TypeVar
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
@@ -34,6 +34,70 @@ _DEFAULT_SETTINGS.strict = False
 _DEFAULT_SETTINGS.xml_huge_tree = True
 
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
+
+_DEFAULT_TIMEOUT = 30
+_PULLPOINT_TIMEOUT = 90
+_CONNECT_TIMEOUT = 30
+_READ_TIMEOUT = 30
+_WRITE_TIMEOUT = 30
+
+
+KEEPALIVE_EXPIRY = 4
+BACKOFF_TIME = KEEPALIVE_EXPIRY + 0.5
+HTTPX_LIMITS = httpx.Limits(keepalive_expiry=4)
+
+
+DEFAULT_ATTEMPTS = 2
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def retry_connection_error(
+    attempts: int = DEFAULT_ATTEMPTS,
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+    """Define a wrapper to retry on connection error."""
+
+    def _decorator_retry_connection_error(
+        func: Callable[P, Awaitable[T]]
+    ) -> Callable[P, Awaitable[T]]:
+        """Define a wrapper to retry on connection error.
+
+        The remote server is allowed to disconnect us any time so
+        we need to retry the operation.
+        """
+
+        async def _async_wrap_connection_error_retry(  # type: ignore[return]
+            *args: P.args, **kwargs: P.kwargs
+        ) -> T:
+            for attempt in range(attempts):
+                try:
+                    return await func(*args, **kwargs)
+                except httpx.RequestError as ex:
+                    #
+                    # We should only need to retry on RemoteProtocolError but some cameras
+                    # are flakey and sometimes do not respond to the Renew request so we
+                    # retry on RequestError as well.
+                    #
+                    # For RemoteProtocolError:
+                    # http://datatracker.ietf.org/doc/html/rfc2616#section-8.1.4 allows the server
+                    # to close the connection at any time, we treat this as a normal and try again
+                    # once since we do not want to declare the camera as not supporting PullPoint
+                    # if it just happened to close the connection at the wrong time.
+                    if attempt == attempts - 1:
+                        raise
+                    logger.debug(
+                        "Error: %s while calling %s, backing off: %s, retrying...",
+                        ex,
+                        func,
+                        BACKOFF_TIME,
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(BACKOFF_TIME)
+
+        return _async_wrap_connection_error_retry
+
+    return _decorator_retry_connection_error
 
 
 def create_no_verify_ssl_context() -> ssl.SSLContext:
@@ -186,6 +250,8 @@ class ONVIFService:
         dt_diff=None,
         binding_name="",
         binding_key="",
+        read_timeout: Optional[int] = None,
+        write_timeout: Optional[int] = None,
     ) -> None:
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -201,11 +267,21 @@ class ONVIFService:
         self.dt_diff = dt_diff
         self.binding_name = binding_name
         # Create soap client
-        client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        timeouts = httpx.Timeout(
+            _DEFAULT_TIMEOUT,
+            connect=_CONNECT_TIMEOUT,
+            read=read_timeout or _READ_TIMEOUT,
+            write=write_timeout or _WRITE_TIMEOUT,
+        )
+        client = AsyncClient(
+            verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts, limits=HTTPX_LIMITS
+        )
         # The wsdl client should never actually be used, but it is required
         # to avoid creating another ssl context since the underlying code
         # will try to create a new one if it doesn't exist.
-        wsdl_client = httpx.Client(verify=_NO_VERIFY_SSL_CONTEXT, timeout=90)
+        wsdl_client = httpx.Client(
+            verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts, limits=HTTPX_LIMITS
+        )
         self.transport = (
             AsyncTransport(client=client, wsdl_client=wsdl_client)
             if no_cache
@@ -483,13 +559,13 @@ class ONVIFCamera:
         """Create a notification manager."""
         return NotificationManager(self, config)
 
-    async def close(self):
+    async def close(self) -> None:
         """Close all transports."""
         await self._snapshot_client.aclose()
         for service in self.services.values():
             await service.close()
 
-    async def get_snapshot_uri(self, profile_token):
+    async def get_snapshot_uri(self, profile_token: str) -> str:
         """Get the snapshot uri for a given profile."""
         uri = self._snapshot_uris.get(profile_token)
         if uri is None:
@@ -501,7 +577,9 @@ class ONVIFCamera:
             self._snapshot_uris[profile_token] = uri
         return uri
 
-    async def get_snapshot(self, profile_token, basic_auth=False):
+    async def get_snapshot(
+        self, profile_token: str, basic_auth: bool = False
+    ) -> Optional[bytes]:
         """Get a snapshot image from the camera."""
         uri = await self.get_snapshot_uri(profile_token)
         if uri is None:
@@ -566,7 +644,11 @@ class ONVIFCamera:
         return xaddr, wsdlpath, binding_name
 
     async def create_onvif_service(
-        self, name: str, port_type: Optional[str] = None
+        self,
+        name: str,
+        port_type: Optional[str] = None,
+        read_timeout: Optional[int] = None,
+        write_timeout: Optional[int] = None,
     ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
@@ -603,6 +685,8 @@ class ONVIFCamera:
             dt_diff=self.dt_diff,
             binding_name=binding_name,
             binding_key=binding_key,
+            read_timeout=read_timeout,
+            write_timeout=write_timeout,
         )
         await service.setup()
 
@@ -610,60 +694,65 @@ class ONVIFCamera:
 
         return service
 
-    async def create_devicemgmt_service(self):
+    async def create_devicemgmt_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("devicemgmt")
 
-    async def create_media_service(self):
+    async def create_media_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("media")
 
-    async def create_ptz_service(self):
+    async def create_ptz_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("ptz")
 
-    async def create_imaging_service(self):
+    async def create_imaging_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("imaging")
 
-    async def create_deviceio_service(self):
+    async def create_deviceio_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("deviceio")
 
-    async def create_events_service(self):
+    async def create_events_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("events")
 
-    async def create_analytics_service(self):
+    async def create_analytics_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("analytics")
 
-    async def create_recording_service(self):
+    async def create_recording_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("recording")
 
-    async def create_search_service(self):
+    async def create_search_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("search")
 
-    async def create_replay_service(self):
+    async def create_replay_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("replay")
 
-    async def create_pullpoint_service(self):
+    async def create_pullpoint_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service(
-            "pullpoint", port_type="PullPointSubscription"
+            "pullpoint",
+            port_type="PullPointSubscription",
+            read_timeout=_PULLPOINT_TIMEOUT,
+            write_timeout=_PULLPOINT_TIMEOUT,
         )
 
-    async def create_notification_service(self):
+    async def create_notification_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("notification")
 
-    async def create_subscription_service(self, port_type=None):
+    async def create_subscription_service(
+        self, port_type: Optional[str] = None
+    ) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("subscription", port_type=port_type)
 
-    async def create_receiver_service(self):
+    async def create_receiver_service(self) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("receiver")
