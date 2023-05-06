@@ -724,7 +724,7 @@ class ONVIFCamera:
 
     async def create_events_service(self) -> ONVIFService:
         """Service creation helper.
-        
+
         WSAs enabled per
         https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
@@ -748,7 +748,7 @@ class ONVIFCamera:
 
     async def create_pullpoint_service(self) -> ONVIFService:
         """Service creation helper.
-        
+
         WSAs enabled per
         https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
@@ -762,7 +762,7 @@ class ONVIFCamera:
 
     async def create_notification_service(self) -> ONVIFService:
         """Service creation helper.
-        
+
         WSAs enabled per
         https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
@@ -772,7 +772,7 @@ class ONVIFCamera:
         self, port_type: Optional[str] = None
     ) -> ONVIFService:
         """Service creation helper.
-        
+
         WSAs enabled per
         https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
