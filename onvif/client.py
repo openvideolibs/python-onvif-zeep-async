@@ -662,20 +662,31 @@ class ONVIFCamera:
             logger.exception("Failed to parse capabilities")
 
     def has_broken_relative_time(
-        self, interval: dt.timedelta, absolute_time: dt.datetime, termination_time: dt.datetime | None
+        self,
+        interval: dt.timedelta,
+        absolute_time: dt.datetime,
+        termination_time: dt.datetime | None,
     ) -> bool:
         """Mark timestamps as broken if a renew or subscribe request returns an unexpected result."""
-        logger.debug("%s: Checking for broken relative timestamps: interval: %s, absolute_time: %s, termination_time: %s", self.host, interval, absolute_time, termination_time)
+        logger.debug(
+            "%s: Checking for broken relative timestamps: interval: %s, absolute_time: %s, termination_time: %s",
+            self.host,
+            interval,
+            absolute_time,
+            termination_time,
+        )
         if not termination_time:
-            logger.debug("%s: No termination time",self.host)
+            logger.debug("%s: No termination time", self.host)
             return False
         if termination_time.tzinfo is None:
-            logger.debug("%s: No timezone info",self.host)
+            logger.debug("%s: No timezone info", self.host)
             return False
-        if abs((termination_time - absolute_time).total_seconds()) > (interval.total_seconds() / 2):
-            logger.debug("%s: Broken relative timestamps",self.host)
+        if abs((termination_time - absolute_time).total_seconds()) > (
+            interval.total_seconds() / 2
+        ):
+            logger.debug("%s: Broken relative timestamps", self.host)
             return True
-        logger.debug("%s: Relative timestamps OK",self.host)
+        logger.debug("%s: Relative timestamps OK", self.host)
         return False
 
     def get_next_termination_time(
