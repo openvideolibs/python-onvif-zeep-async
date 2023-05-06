@@ -709,7 +709,12 @@ class ONVIFCamera:
                 actual_interval,
             )
             return True
-        logger.debug("%s: Relative timestamps OK", self.host)
+        logger.debug(
+            "%s: Relative timestamps OK: expected interval: %s, actual interval: %s",
+            self.host,
+            expected_interval,
+            actual_interval,
+        )
         return False
 
     def get_next_termination_time(self, duration: dt.timedelta) -> str:
