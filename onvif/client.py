@@ -394,6 +394,12 @@ class NotificationManager:
         self._operation: Optional[SoapOperation] = None
         self._device = device
         self._interval = interval
+        self._webhook_subscription: Optional[ONVIFService] = None
+
+    @property
+    def closed(self) -> bool:
+        """Return True if the manager is closed."""
+        return not self._webhook_subscription or self._webhook_subscription.transport.client.is_closed
 
     async def setup(self) -> ONVIFService:
         """Setup the notification processor."""
@@ -444,6 +450,11 @@ class NotificationManager:
             await self._service.SetSynchronizationPoint()
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
+
+    async def stop(self) -> None:
+        """Stop the notification processor."""
+        assert self._webhook_subscription, "Call start first"
+        await self._webhook_subscription.Unsubscribe()
 
     async def renew(self) -> Any:
         """Renew the notification subscription."""
@@ -615,11 +626,14 @@ class ONVIFCamera:
             return False
         return True
 
-    def create_notification_manager(
+    async def create_notification_manager(
         self, address: str, interval: dt.timedelta
     ) -> NotificationManager:
         """Create a notification manager."""
-        return NotificationManager(self, address, interval)
+        manager = NotificationManager(self, address, interval)
+        await manager.setup()
+        await manager.start()
+        return manager
 
     async def close(self) -> None:
         """Close all transports."""
