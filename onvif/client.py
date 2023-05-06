@@ -708,6 +708,7 @@ class ONVIFCamera:
                 expected_interval,
                 actual_interval,
             )
+            self._has_broken_relative_timestamps = True
             return True
         logger.debug(
             "%s: Relative timestamps OK: expected interval: %s, actual interval: %s",
