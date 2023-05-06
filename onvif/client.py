@@ -522,7 +522,7 @@ class PullPointManager:
         )
         # pylint: disable=protected-access
         device.xaddrs[
-            "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
+            "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
         ] = pullpoint.SubscriptionReference.Address._value_1
         # Create subscription manager
         self._pullpoint_subscription = await device.create_subscription_service(
