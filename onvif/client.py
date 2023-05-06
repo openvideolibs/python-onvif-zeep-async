@@ -689,21 +689,6 @@ class ONVIFCamera:
             "+00:00", "Z"
         )
 
-    async def create_pullpoint_subscription(
-        self, config: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """Create a pullpoint subscription."""
-        try:
-            events = await self.create_events_service()
-            pullpoint = await events.CreatePullPointSubscription(config or {})
-            # pylint: disable=protected-access
-            self.xaddrs[
-                "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
-            ] = pullpoint.SubscriptionReference.Address._value_1
-        except Fault:
-            return False
-        return True
-
     async def create_pullpoint_manager(
         self, interval: dt.timedelta
     ) -> PullPointManager:
