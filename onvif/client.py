@@ -36,7 +36,7 @@ _DEFAULT_SETTINGS.xml_huge_tree = True
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
 
 _DEFAULT_TIMEOUT = 30
-_PULLPOINT_TIMEOUT = 90
+_PULLPOINT_TIMEOUT = 80
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 30
 _WRITE_TIMEOUT = 30
