@@ -409,8 +409,8 @@ class NotificationManager:
 
     async def setup(self) -> ONVIFService:
         """Setup the notification processor."""
-        logger.debug("%s: Setup the notification manager", self._device.host)
         device = self._device
+        logger.debug("%s: Setup the notification manager", device.host)
         notify_service = await device.create_notification_service()
         time_str = device.get_next_termination_time(self._interval)
         notify_subscribe = await notify_service.Subscribe(
@@ -432,14 +432,14 @@ class NotificationManager:
         # to webhook later when the first notification is received.
         # WSAs enabled per
         # https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
-        service = await self._device.create_onvif_service(
+        service = await device.create_onvif_service(
             "pullpoint", port_type="NotificationConsumer", enable_wsa=True
         )
         self._operation = service.document.bindings[service.binding_name].get(
             "PullMessages"
         )
         self._service = service
-        self._webhook_subscription = await self._device.create_subscription_service(
+        self._webhook_subscription = await device.create_subscription_service(
             "NotificationConsumer"
         )
         if device.has_broken_relative_time(
@@ -447,6 +447,8 @@ class NotificationManager:
             notify_subscribe.CurrentTime,
             notify_subscribe.TerminationTime,
         ):
+            # If we determine the device has broken relative timestamps, we switch
+            # to using absolute timestamps and renew the subscription.
             await self.renew()
         return self._webhook_subscription
 
@@ -467,9 +469,10 @@ class NotificationManager:
 
     async def renew(self) -> Any:
         """Renew the notification subscription."""
-        logger.debug("%s: Renew the notification manager", self._device.host)
+        device = self._device
+        logger.debug("%s: Renew the notification manager", device.host)
         return await self._webhook_subscription.Renew(
-            self._device.get_next_termination_time(self._interval)
+            device.get_next_termination_time(self._interval)
         )
 
     def process(self, content: bytes) -> Optional[Any]:
@@ -510,8 +513,8 @@ class PullPointManager:
 
     async def setup(self) -> ONVIFService:
         """Setup the PullPoint manager."""
-        logger.debug("%s: Setup the PullPoint manager", self._device.host)
         device = self._device
+        logger.debug("%s: Setup the PullPoint manager", device.host)
         events_service = await device.create_events_service()
         pullpoint = await events_service.CreatePullPointSubscription(
             {
@@ -529,10 +532,12 @@ class PullPointManager:
             "PullPointSubscription"
         )
         # Create the service that will be used to pull messages from the device.
-        self._service = await self._device.create_pullpoint_service()
+        self._service = await device.create_pullpoint_service()
         if device.has_broken_relative_time(
             self._interval, pullpoint.CurrentTime, pullpoint.TerminationTime
         ):
+            # If we determine the device has broken relative timestamps, we switch
+            # to using absolute timestamps and renew the subscription.
             await self.renew()
         return self._pullpoint_subscription
 
@@ -558,9 +563,10 @@ class PullPointManager:
 
     async def renew(self) -> Any:
         """Renew the notification subscription."""
-        logger.debug("%s: Renew the PullPoint manager", self._device.host)
+        device = self._device
+        logger.debug("%s: Renew the PullPoint manager", device.host)
         return await self._pullpoint_subscription.Renew(
-            self._device.get_next_termination_time(self._interval)
+            device.get_next_termination_time(self._interval)
         )
 
 
