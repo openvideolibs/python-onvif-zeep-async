@@ -409,6 +409,7 @@ class NotificationManager:
 
     async def setup(self) -> ONVIFService:
         """Setup the notification processor."""
+        logger.debug("%s: Setup the notification manager", self._device.host)
         device = self._device
         notify_service = await device.create_notification_service()
         expected_termination_time, time_str = device.get_next_termination_time(
@@ -451,6 +452,7 @@ class NotificationManager:
 
     async def start(self) -> None:
         """Start the notification processor."""
+        logger.debug("%s: Start the notification manager", self._device.host)
         assert self._service, "Call setup first"
         try:
             await self._service.SetSynchronizationPoint()
@@ -459,13 +461,14 @@ class NotificationManager:
 
     async def stop(self) -> None:
         """Stop the notification processor."""
+        logger.debug("%s: Stop the notification manager", self._device.host)
         assert self._webhook_subscription, "Call start first"
         await self._webhook_subscription.Unsubscribe()
 
     async def renew(self) -> Any:
         """Renew the notification subscription."""
-        device = self._device
-        _, time_str = device.get_next_termination_time(self._interval)
+        logger.debug("%s: Renew the notification manager", self._device.host)
+        _, time_str = self._device.get_next_termination_time(self._interval)
         return await self._webhook_subscription.Renew(time_str)
 
     def process(self, content: bytes) -> Optional[Any]:
@@ -505,7 +508,8 @@ class PullPointManager:
         )
 
     async def setup(self) -> ONVIFService:
-        """Setup the notification processor."""
+        """Setup the PullPoint manager."""
+        logger.debug("%s: Setup the PullPoint manager", self._device.host)
         device = self._device
         events_service = await device.create_events_service()
         expected_termination_time, time_str = device.get_next_termination_time(
@@ -539,6 +543,7 @@ class PullPointManager:
 
     async def start(self) -> None:
         """Start the notification processor."""
+        logger.debug("%s: Start the PullPoint manager", self._device.host)
         assert self._service, "Call setup first"
         try:
             await self._service.SetSynchronizationPoint()
@@ -547,13 +552,14 @@ class PullPointManager:
 
     async def stop(self) -> None:
         """Stop the notification processor."""
+        logger.debug("%s: Stop the PullPoint manager", self._device.host)
         assert self._pullpoint_subscription, "Call start first"
         await self._pullpoint_subscription.Unsubscribe()
 
     async def renew(self) -> Any:
         """Renew the notification subscription."""
-        device = self._device
-        _, time_str = device.get_next_termination_time(self._interval)
+        logger.debug("%s: Renew the PullPoint manager", self._device.host)
+        _, time_str = self._device.get_next_termination_time(self._interval)
         return await self._pullpoint_subscription.Renew(time_str)
 
 
@@ -667,7 +673,7 @@ class ONVIFCamera:
         expected: dt.datetime,
         actual: dt.datetime | None,
     ) -> bool:
-        """Mark timestamps as broken if a renew or subscribe request returns an unexpected result."""
+        """Mark timestamps as broken if a subscribe request returns an unexpected result."""
         logger.debug(
             "%s: Checking for broken relative timestamps: interval: %s, expected: %s, actual: %s",
             self.host,
