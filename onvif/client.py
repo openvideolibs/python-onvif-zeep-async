@@ -684,7 +684,7 @@ class ONVIFCamera:
         if dt_diff := self.dt_diff:
             absolute_time += dt_diff
         if not self._has_broken_relative_timestamps:
-            return absolute_time, f"PT{duration.total_seconds()}S"
+            return absolute_time, f"PT{int(duration.total_seconds())}S"
         return absolute_time, absolute_time.isoformat(timespec="seconds").replace(
             "+00:00", "Z"
         )
