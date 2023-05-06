@@ -720,7 +720,7 @@ class ONVIFCamera:
     def get_next_termination_time(self, duration: dt.timedelta) -> str:
         """Calculate subscription absolute termination time."""
         if not self._has_broken_relative_timestamps:
-            return absolute_time, f"PT{int(duration.total_seconds())}S"
+            return f"PT{int(duration.total_seconds())}S"
         absolute_time: dt.datetime = _utcnow() + duration
         if dt_diff := self.dt_diff:
             absolute_time += dt_diff
