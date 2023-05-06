@@ -708,7 +708,7 @@ class ONVIFCamera:
             )
             return False
         actual_interval = termination_time - current_time
-        if abs(actual_interval.total_seconds()) > (
+        if abs(actual_interval.total_seconds()) < (
             expected_interval.total_seconds() / 2
         ):
             logger.debug(
