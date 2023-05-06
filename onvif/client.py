@@ -388,7 +388,9 @@ class ONVIFService:
 class NotificationManager:
     """Manager to process notifications."""
 
-    def __init__(self, device: "ONVIFCamera", address: str, interval: dt.timedelta) -> None:
+    def __init__(
+        self, device: "ONVIFCamera", address: str, interval: dt.timedelta
+    ) -> None:
         """Initialize the notification processor."""
         self._service: Optional[ONVIFService] = None
         self._operation: Optional[SoapOperation] = None
@@ -481,7 +483,6 @@ class NotificationManager:
             logger.error("Received invalid XML: %s", exc)
             return None
         return self._operation.process_reply(envelope)
-
 
 
 class PullPointManager:
@@ -702,7 +703,7 @@ class ONVIFCamera:
         except Fault:
             return False
         return True
-    
+
     async def create_pullpoint_manager(
         self, interval: dt.timedelta
     ) -> PullPointManager:
