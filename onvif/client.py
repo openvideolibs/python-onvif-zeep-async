@@ -2,12 +2,12 @@
 import asyncio
 import contextlib
 import datetime as dt
-from functools import lru_cache
+from functools import lru_cache, partial
 import logging
 import os.path
 import ssl
 from typing import Any, Awaitable, Callable, Dict, Optional, ParamSpec, Tuple, TypeVar
-from functools import partial
+
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
 from zeep.cache import SqliteCache
@@ -399,7 +399,10 @@ class NotificationManager:
     @property
     def closed(self) -> bool:
         """Return True if the manager is closed."""
-        return not self._webhook_subscription or self._webhook_subscription.transport.client.is_closed
+        return (
+            not self._webhook_subscription
+            or self._webhook_subscription.transport.client.is_closed
+        )
 
     async def setup(self) -> ONVIFService:
         """Setup the notification processor."""
