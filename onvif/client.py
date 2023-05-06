@@ -400,7 +400,7 @@ class NotificationManager:
         self._address = address
         self._interval = interval
         self._renew_lock = asyncio.Lock()
-        self._webhook_subscription: Optional[ONVIFService] = None
+        self._notify_subscription: Optional[ONVIFService] = None
         self._restart_or_renew_task: Optional[asyncio.Task] = None
         self._loop = asyncio.get_event_loop()
         self._shutdown = False
@@ -410,8 +410,8 @@ class NotificationManager:
     def closed(self) -> bool:
         """Return True if the manager is closed."""
         return (
-            not self._webhook_subscription
-            or self._webhook_subscription.transport.client.is_closed
+            not self._notify_subscription
+            or self._notify_subscription.transport.client.is_closed
         )
 
     async def _start(self) -> float:
@@ -447,7 +447,7 @@ class NotificationManager:
             "PullMessages"
         )
         self._service = service
-        self._webhook_subscription = await device.create_subscription_service(
+        self._notify_subscription = await device.create_subscription_service(
             "NotificationConsumer"
         )
         if device.has_broken_relative_time(
@@ -457,7 +457,7 @@ class NotificationManager:
         ):
             # If we determine the device has broken relative timestamps, we switch
             # to using absolute timestamps and renew the subscription.
-            result = await self._webhook_subscription.Renew(
+            result = await self._notify_subscription.Renew(
                 device.get_next_termination_time(self._interval)
             )
         renewal_call_at = self._calculate_next_renewal_call_at(result)
@@ -472,15 +472,15 @@ class NotificationManager:
     async def start(self) -> None:
         """Setup the notification processor."""
         renewal_call_at = await self._start()
-        self._schedule_webhook_renew(renewal_call_at)
-        return self._webhook_subscription
+        self._schedule_subscription_renew(renewal_call_at)
+        return self._notify_subscription
 
     async def stop(self) -> None:
         """Stop the notification processor."""
         logger.debug("%s: Stop the notification manager", self._device.host)
         self._cancel_renewals()
-        assert self._webhook_subscription, "Call start first"
-        await self._webhook_subscription.Unsubscribe()
+        assert self._notify_subscription, "Call start first"
+        await self._notify_subscription.Unsubscribe()
 
     async def shutdown(self) -> None:
         """Shutdown the notification processor."""
@@ -495,7 +495,7 @@ class NotificationManager:
         device = self._device
         logger.debug("%s: Renew the notification manager", device.host)
         return self._calculate_next_renewal_call_at(
-            await self._webhook_subscription.Renew(
+            await self._notify_subscription.Renew(
                 device.get_next_termination_time(self._interval)
             )
         )
@@ -518,9 +518,9 @@ class NotificationManager:
 
     def _cancel_renewals(self) -> None:
         """Cancel any pending renewals."""
-        if self._cancel_webhook_renew:
-            self._cancel_webhook_renew()
-            self._cancel_webhook_renew = None
+        if self._cancel_subscription_renew:
+            self._cancel_subscription_renew()
+            self._cancel_subscription_renew = None
 
     def _calculate_next_renewal_call_at(self, result: Any | None) -> float:
         """Calculate the next renewal call_at."""
@@ -532,10 +532,10 @@ class NotificationManager:
             delay = self._interval
         return self._loop.time() + delay.total_seconds() * _RENEWAL_PERCENTAGE
 
-    def _schedule_webhook_renew(self, when: float) -> None:
-        """Schedule webhook subscription renewal."""
+    def _schedule_subscription_renew(self, when: float) -> None:
+        """Schedule notify subscription renewal."""
         self._cancel_renewals()
-        self._cancel_webhook_renew = self._loop.call_at(
+        self._cancel_subscription_renew = self._loop.call_at(
             when,
             self._run_restart_or_renew,
         )
@@ -543,48 +543,48 @@ class NotificationManager:
     def _run_restart_or_renew(self) -> None:
         """Create a background task."""
         if self._restart_or_renew_task and not self._restart_or_renew_task.done():
-            logger.debug("%s: Webhook renew already in progress", self._device.host)
+            logger.debug("%s: Notify renew already in progress", self._device.host)
             return
         self._restart_or_renew_task = asyncio.create_task(
-            self._renew_or_restart_webhook()
+            self._renew_or_restart_subscription()
         )
 
-    async def _restart_webhook(self) -> bool:
-        """Restart the webhook subscription assuming the camera rebooted."""
+    async def _restart_subscription(self) -> bool:
+        """Restart the notify subscription assuming the camera rebooted."""
         self._cancel_renewals()
         return await self._start()
 
     @retry_connection_error()
-    async def _call_webhook_subscription_renew(self) -> float:
-        """Call PullPoint subscription Renew."""
+    async def _call_notify_subscription_renew(self) -> float:
+        """Call notify subscription Renew."""
         return await self.renew()
 
-    async def _renew_webhook(self) -> float | None:
-        """Renew webhook subscription."""
+    async def _renew_subscription(self) -> float | None:
+        """Renew notify subscription."""
         if self.closed or self._shutdown:
             return None
         try:
-            return await self._call_webhook_subscription_renew()
+            return await self._call_notify_subscription_renew()
         except RENEW_ERRORS as err:
             self._subscription_lost_callback()
             logger.debug(
-                "%s: Failed to renew webhook subscription %s",
+                "%s: Failed to renew notify subscription %s",
                 self._device.host,
                 stringify_onvif_error(err),
             )
         return None
 
-    async def _renew_or_restart_webhook(self, now: dt.datetime | None = None) -> None:
-        """Renew or start webhook subscription."""
+    async def _renew_or_restart_subscription(self, now: dt.datetime | None = None) -> None:
+        """Renew or start notify subscription."""
         if self._shutdown:
             return
         renewal_call_at = None
         try:
             renewal_call_at = (
-                await self._renew_webhook() or await self._restart_webhook()
+                await self._renew_subscription() or await self._restart_subscription()
             )
         finally:
-            self._schedule_webhook_renew(
+            self._schedule_subscription_renew(
                 renewal_call_at
                 or self._loop.time()
                 + SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR.total_seconds()
