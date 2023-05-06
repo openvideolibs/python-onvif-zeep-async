@@ -388,11 +388,12 @@ class ONVIFService:
 class NotificationManager:
     """Manager to process notifications."""
 
-    def __init__(self, device: "ONVIFCamera", interval: dt.timedelta) -> None:
-        """Initialize the PullPoint processor."""
+    def __init__(self, device: "ONVIFCamera", address: str, interval: dt.timedelta) -> None:
+        """Initialize the notification processor."""
         self._service: Optional[ONVIFService] = None
         self._operation: Optional[SoapOperation] = None
         self._device = device
+        self._address = address
         self._interval = interval
         self._webhook_subscription: Optional[ONVIFService] = None
 
@@ -480,6 +481,79 @@ class NotificationManager:
             logger.error("Received invalid XML: %s", exc)
             return None
         return self._operation.process_reply(envelope)
+
+
+
+class PullPointManager:
+    """Manager for PullPoint."""
+
+    def __init__(self, device: "ONVIFCamera", interval: dt.timedelta) -> None:
+        """Initialize the PullPoint processor."""
+        self._service: Optional[ONVIFService] = None
+        self._operation: Optional[SoapOperation] = None
+        self._device = device
+        self._interval = interval
+        self._pullpoint_subscription: Optional[ONVIFService] = None
+
+    @property
+    def closed(self) -> bool:
+        """Return True if the manager is closed."""
+        return (
+            not self._pullpoint_subscription
+            or self._pullpoint_subscription.transport.client.is_closed
+        )
+
+    async def setup(self) -> ONVIFService:
+        """Setup the notification processor."""
+        device = self._device
+        events_service = await device.create_events_service()
+        expected_termination_time, time_str = device.get_next_termination_time(
+            self._interval
+        )
+        pullpoint = await events_service.CreatePullPointSubscription(
+            {
+                "InitialTerminationTime": time_str,
+            }
+        )
+        # pylint: disable=protected-access
+        device.xaddrs[
+            "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
+        ] = pullpoint.SubscriptionReference.Address._value_1
+        # Create subscription manager
+        self._pullpoint_subscription = await device.create_subscription_service(
+            "PullPointSubscription"
+        )
+        # Create the service that will be used to pull messages from the device.
+        self._service = await self._device.create_pullpoint_service()
+        if device.check_for_broken_relative_timestamps(
+            expected_termination_time, pullpoint.TerminationTime
+        ):
+            await self.renew()
+        return self._pullpoint_subscription
+
+    def get_service(self) -> ONVIFService:
+        """Return the pullpoint service."""
+        assert self._service, "Call setup first"
+        return self._service
+
+    async def start(self) -> None:
+        """Start the notification processor."""
+        assert self._service, "Call setup first"
+        try:
+            await self._service.SetSynchronizationPoint()
+        except (Fault, asyncio.TimeoutError, TransportError, TypeError):
+            logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
+
+    async def stop(self) -> None:
+        """Stop the notification processor."""
+        assert self._pullpoint_subscription, "Call start first"
+        await self._pullpoint_subscription.Unsubscribe()
+
+    async def renew(self) -> Any:
+        """Renew the notification subscription."""
+        device = self._device
+        _, time_str = device.get_next_termination_time(self._interval)
+        return await self._pullpoint_subscription.Renew(time_str)
 
 
 _utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
@@ -628,6 +702,15 @@ class ONVIFCamera:
         except Fault:
             return False
         return True
+    
+    async def create_pullpoint_manager(
+        self, interval: dt.timedelta
+    ) -> PullPointManager:
+        """Create a pullpoint manager."""
+        manager = PullPointManager(self, interval)
+        await manager.setup()
+        await manager.start()
+        return manager
 
     async def create_notification_manager(
         self, address: str, interval: dt.timedelta
