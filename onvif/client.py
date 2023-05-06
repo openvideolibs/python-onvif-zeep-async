@@ -675,6 +675,8 @@ class ONVIFCamera:
         termination_time: dt.datetime | None,
     ) -> bool:
         """Mark timestamps as broken if a subscribe request returns an unexpected result."""
+        if self._has_broken_relative_timestamps:
+            return True
         logger.debug(
             "%s: Checking for broken relative timestamps: expected_interval: %s, current_time: %s, termination_time: %s",
             self.host,
@@ -702,8 +704,8 @@ class ONVIFCamera:
         if abs(actual_interval.total_seconds()) > (
             expected_interval.total_seconds() / 2
         ):
-            logger.warning(
-                "%s: Broken relative timestamps detected: expected interval: %s, actual interval: %s",
+            logger.debug(
+                "%s: Broken relative timestamps detected, switching to absolute timestamps: expected interval: %s, actual interval: %s",
                 self.host,
                 expected_interval,
                 actual_interval,
