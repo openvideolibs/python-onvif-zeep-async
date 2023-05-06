@@ -39,11 +39,11 @@ _DEFAULT_SETTINGS.xml_huge_tree = True
 
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
 
-_DEFAULT_TIMEOUT = 30
-_PULLPOINT_TIMEOUT = 80
+_DEFAULT_TIMEOUT = 90
+_PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
-_READ_TIMEOUT = 30
-_WRITE_TIMEOUT = 30
+_READ_TIMEOUT = 90
+_WRITE_TIMEOUT = 90
 
 _RENEWAL_PERCENTAGE = 0.8
 
@@ -260,7 +260,6 @@ class ONVIFService:
         binding_key="",
         read_timeout: Optional[int] = None,
         write_timeout: Optional[int] = None,
-        enable_wsa: bool = False,
     ) -> None:
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -305,7 +304,6 @@ class ONVIFService:
         self.ws_client: Optional[AsyncServiceProxy] = None
         self.create_type: Optional[Callable] = None
         self.loop = asyncio.get_event_loop()
-        self._enable_wsa = enable_wsa
 
     async def setup(self):
         """Setup the transport."""
@@ -317,15 +315,11 @@ class ONVIFService:
         self.document = await self.loop.run_in_executor(
             None, _cached_document, self.url
         )
-        # Some cameras never return a response to GetCapabilities if WS-Addressing is enabled
-        # but some cameras require WS-Addressing to be enabled for PullPoint or events to work
-        # so we have a flag to enable/disable it which can be changed per service.
-        plugins = [WsAddressingPlugin()] if self._enable_wsa else []
         self.zeep_client_authless = ZeepAsyncClient(
             wsdl=self.document,
             transport=self.transport,
             settings=settings,
-            plugins=plugins,
+            plugins=[WsAddressingPlugin()],
         )
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
@@ -335,7 +329,7 @@ class ONVIFService:
             wsse=wsse,
             transport=self.transport,
             settings=settings,
-            plugins=plugins,
+            plugins=[WsAddressingPlugin()],
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
         namespace = binding_name[binding_name.find("{") + 1 : binding_name.find("}")]
@@ -446,9 +440,6 @@ class NotificationManager:
         #
         # If this fails this is OK as it just means we will switch
         # to webhook later when the first notification is received.
-        #
-        # WSAs not enabled on this service per
-        # https://github.com/home-assistant/core/issues/92308
         service = await self._device.create_onvif_service(
             "pullpoint", port_type="NotificationConsumer"
         )
@@ -950,7 +941,6 @@ class ONVIFCamera:
         port_type: Optional[str] = None,
         read_timeout: Optional[int] = None,
         write_timeout: Optional[int] = None,
-        enable_wsa: bool = False,
     ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
@@ -989,7 +979,6 @@ class ONVIFCamera:
             binding_key=binding_key,
             read_timeout=read_timeout,
             write_timeout=write_timeout,
-            enable_wsa=enable_wsa,
         )
         await service.setup()
 
@@ -1018,11 +1007,7 @@ class ONVIFCamera:
         return await self.create_onvif_service("deviceio")
 
     async def create_events_service(self) -> ONVIFService:
-        """Service creation helper.
-
-        WSAs not enabled on this service per
-        https://github.com/home-assistant/core/issues/92308
-        """
+        """Service creation helper."""
         return await self.create_onvif_service("events")
 
     async def create_analytics_service(self) -> ONVIFService:
@@ -1042,11 +1027,7 @@ class ONVIFCamera:
         return await self.create_onvif_service("replay")
 
     async def create_pullpoint_service(self) -> ONVIFService:
-        """Service creation helper.
-
-        WSAs not enabled on this service per
-        https://github.com/home-assistant/core/issues/92308
-        """
+        """Service creation helper."""
         return await self.create_onvif_service(
             "pullpoint",
             port_type="PullPointSubscription",
@@ -1055,24 +1036,14 @@ class ONVIFCamera:
         )
 
     async def create_notification_service(self) -> ONVIFService:
-        """Service creation helper.
-
-        WSAs not enabled on this service per
-        https://github.com/home-assistant/core/issues/92308
-        """
+        """Service creation helper."""
         return await self.create_onvif_service("notification")
 
     async def create_subscription_service(
         self, port_type: Optional[str] = None
     ) -> ONVIFService:
-        """Service creation helper.
-
-        WSAs enabled per
-        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
-        """
-        return await self.create_onvif_service(
-            "subscription", port_type=port_type, enable_wsa=True
-        )
+        """Service creation helper."""
+        return await self.create_onvif_service("subscription", port_type=port_type)
 
     async def create_receiver_service(self) -> ONVIFService:
         """Service creation helper."""
