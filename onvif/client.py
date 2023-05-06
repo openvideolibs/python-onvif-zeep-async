@@ -655,6 +655,7 @@ class ONVIFCamera:
         port_type: Optional[str] = None,
         read_timeout: Optional[int] = None,
         write_timeout: Optional[int] = None,
+        enable_wsa: bool = False,
     ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
@@ -693,6 +694,7 @@ class ONVIFCamera:
             binding_key=binding_key,
             read_timeout=read_timeout,
             write_timeout=write_timeout,
+            enable_wsa=enable_wsa,
         )
         await service.setup()
 
@@ -721,7 +723,11 @@ class ONVIFCamera:
         return await self.create_onvif_service("deviceio")
 
     async def create_events_service(self) -> ONVIFService:
-        """Service creation helper."""
+        """Service creation helper.
+        
+        WSAs enabled per
+        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
+        """
         return await self.create_onvif_service("events", enable_wsa=True)
 
     async def create_analytics_service(self) -> ONVIFService:
@@ -741,7 +747,11 @@ class ONVIFCamera:
         return await self.create_onvif_service("replay")
 
     async def create_pullpoint_service(self) -> ONVIFService:
-        """Service creation helper."""
+        """Service creation helper.
+        
+        WSAs enabled per
+        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
+        """
         return await self.create_onvif_service(
             "pullpoint",
             port_type="PullPointSubscription",
@@ -751,13 +761,21 @@ class ONVIFCamera:
         )
 
     async def create_notification_service(self) -> ONVIFService:
-        """Service creation helper."""
+        """Service creation helper.
+        
+        WSAs enabled per
+        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
+        """
         return await self.create_onvif_service("notification", enable_wsa=True)
 
     async def create_subscription_service(
         self, port_type: Optional[str] = None
     ) -> ONVIFService:
-        """Service creation helper."""
+        """Service creation helper.
+        
+        WSAs enabled per
+        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
+        """
         return await self.create_onvif_service(
             "subscription", port_type=port_type, enable_wsa=True
         )
