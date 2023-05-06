@@ -410,11 +410,10 @@ class NotificationManager:
         #
         # If this fails this is OK as it just means we will switch
         # to webhook later when the first notification is received.
-        #
-        # WSAs not enabled on this service per
-        # https://github.com/home-assistant/core/issues/92308
+        # WSAs enabled per
+        # https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         service = await self._device.create_onvif_service(
-            "pullpoint", port_type="NotificationConsumer"
+            "pullpoint", port_type="NotificationConsumer", enable_wsa=True
         )
         self._operation = service.document.bindings[service.binding_name].get(
             "PullMessages"
@@ -728,10 +727,10 @@ class ONVIFCamera:
     async def create_events_service(self) -> ONVIFService:
         """Service creation helper.
 
-        WSAs not enabled on this service per
-        https://github.com/home-assistant/core/issues/92308
+        WSAs enabled per
+        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
-        return await self.create_onvif_service("events")
+        return await self.create_onvif_service("events", enable_wsa=True)
 
     async def create_analytics_service(self) -> ONVIFService:
         """Service creation helper."""
@@ -752,23 +751,24 @@ class ONVIFCamera:
     async def create_pullpoint_service(self) -> ONVIFService:
         """Service creation helper.
 
-        WSAs not enabled on this service per
-        https://github.com/home-assistant/core/issues/92308
+        WSAs enabled per
+        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
         return await self.create_onvif_service(
             "pullpoint",
             port_type="PullPointSubscription",
             read_timeout=_PULLPOINT_TIMEOUT,
             write_timeout=_PULLPOINT_TIMEOUT,
+            enable_wsa=True,
         )
 
     async def create_notification_service(self) -> ONVIFService:
         """Service creation helper.
 
-        WSAs not enabled on this service per
-        https://github.com/home-assistant/core/issues/92308
+        WSAs enabled per
+        https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
-        return await self.create_onvif_service("notification")
+        return await self.create_onvif_service("notification", enable_wsa=True)
 
     async def create_subscription_service(
         self, port_type: Optional[str] = None
