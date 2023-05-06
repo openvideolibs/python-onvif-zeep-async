@@ -664,27 +664,30 @@ class ONVIFCamera:
     def has_broken_relative_time(
         self,
         interval: dt.timedelta,
-        absolute_time: dt.datetime,
-        termination_time: dt.datetime | None,
+        expected: dt.datetime,
+        actual: dt.datetime | None,
     ) -> bool:
         """Mark timestamps as broken if a renew or subscribe request returns an unexpected result."""
         logger.debug(
-            "%s: Checking for broken relative timestamps: interval: %s, absolute_time: %s, termination_time: %s",
+            "%s: Checking for broken relative timestamps: interval: %s, expected: %s, actual: %s",
             self.host,
             interval,
-            absolute_time,
-            termination_time,
+            expected,
+            actual,
         )
-        if not termination_time:
+        if not actual:
             logger.debug("%s: No termination time", self.host)
             return False
-        if termination_time.tzinfo is None:
+        if actual.tzinfo is None:
             logger.debug("%s: No timezone info", self.host)
             return False
-        if abs((termination_time - absolute_time).total_seconds()) > (
-            interval.total_seconds() / 2
-        ):
-            logger.debug("%s: Broken relative timestamps", self.host)
+        if abs((actual - expected).total_seconds()) > (interval.total_seconds() / 2):
+            logger.warning(
+                "%s: Broken relative timestamps detected: expected: %s, actual: %s",
+                self.host,
+                expected,
+                actual,
+            )
             return True
         logger.debug("%s: Relative timestamps OK", self.host)
         return False
