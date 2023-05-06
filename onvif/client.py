@@ -443,8 +443,8 @@ class NotificationManager:
         self._webhook_subscription = await self._device.create_subscription_service(
             "NotificationConsumer"
         )
-        if device.check_for_broken_relative_timestamps(
-            expected_termination_time, notify_subscribe.TerminationTime
+        if device.has_broken_relative_time(
+            self._interval, expected_termination_time, notify_subscribe.TerminationTime
         ):
             await self.renew()
         return self._webhook_subscription
@@ -526,8 +526,8 @@ class PullPointManager:
         )
         # Create the service that will be used to pull messages from the device.
         self._service = await self._device.create_pullpoint_service()
-        if device.check_for_broken_relative_timestamps(
-            expected_termination_time, pullpoint.TerminationTime
+        if device.has_broken_relative_time(
+            self._interval, expected_termination_time, pullpoint.TerminationTime
         ):
             await self.renew()
         return self._pullpoint_subscription
@@ -661,20 +661,22 @@ class ONVIFCamera:
         except Exception:
             logger.exception("Failed to parse capabilities")
 
-    def check_for_broken_relative_timestamps(
-        self, absolute_time: dt.datetime, termination_time: dt.datetime | None
+    def has_broken_relative_time(
+        self, interval: dt.timedelta, absolute_time: dt.datetime, termination_time: dt.datetime | None
     ) -> bool:
         """Mark timestamps as broken if a renew or subscribe request returns an unexpected result."""
-        import pprint
-
-        pprint.pprint(
-            [
-                "expected termination time",
-                absolute_time,
-                "actual termination time",
-                termination_time,
-            ]
-        )
+        logger.debug("%s: Checking for broken relative timestamps: interval: %s, absolute_time: %s, termination_time: %s", self.host, interval, absolute_time, termination_time)
+        if not termination_time:
+            logger.debug("%s: No termination time",self.host)
+            return False
+        if termination_time.tzinfo is None:
+            logger.debug("%s: No timezone info",self.host)
+            return False
+        if abs((termination_time - absolute_time).total_seconds()) > (interval.total_seconds() / 2):
+            logger.debug("%s: Broken relative timestamps",self.host)
+            return True
+        logger.debug("%s: Relative timestamps OK",self.host)
+        return False
 
     def get_next_termination_time(
         self, duration: dt.timedelta
