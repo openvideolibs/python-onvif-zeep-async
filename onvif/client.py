@@ -1,4 +1,6 @@
 """ONVIF Client."""
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import datetime as dt
@@ -12,7 +14,7 @@ import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
 from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
-from zeep.exceptions import Fault, XMLSyntaxError
+from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 import zeep.helpers
 from zeep.loader import parse_xml
 from zeep.proxy import AsyncServiceProxy
@@ -24,6 +26,8 @@ from zeep.wsse.username import UsernameToken
 
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
+
+from .util import extract_subcodes_as_strings, is_auth_error, stringify_onvif_error
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -41,11 +45,15 @@ _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 30
 _WRITE_TIMEOUT = 30
 
+_RENEWAL_PERCENTAGE = 0.8
 
 KEEPALIVE_EXPIRY = 4
 BACKOFF_TIME = KEEPALIVE_EXPIRY + 0.5
 HTTPX_LIMITS = httpx.Limits(keepalive_expiry=4)
 
+SUBSCRIPTION_ERRORS = (Fault, asyncio.TimeoutError, TransportError)
+RENEW_ERRORS = (ONVIFError, httpx.RequestError, XMLParseError, *SUBSCRIPTION_ERRORS)
+SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 
 DEFAULT_ATTEMPTS = 2
 
@@ -389,7 +397,7 @@ class NotificationManager:
     """Manager to process notifications."""
 
     def __init__(
-        self, device: "ONVIFCamera", address: str, interval: dt.timedelta
+        self, device: "ONVIFCamera", address: str, interval: dt.timedelta, subscription_lost_callback: Callable[[], None]
     ) -> None:
         """Initialize the notification processor."""
         self._service: Optional[ONVIFService] = None
@@ -397,7 +405,12 @@ class NotificationManager:
         self._device = device
         self._address = address
         self._interval = interval
+        self._renew_lock = asyncio.Lock()
         self._webhook_subscription: Optional[ONVIFService] = None
+        self._restart_or_renew_task: Optional[asyncio.Task] = None
+        self._loop = asyncio.get_event_loop()
+        self._shutdown = False
+        self._subscription_lost_callback = subscription_lost_callback
 
     @property
     def closed(self) -> bool:
@@ -407,13 +420,16 @@ class NotificationManager:
             or self._webhook_subscription.transport.client.is_closed
         )
 
-    async def setup(self) -> ONVIFService:
-        """Setup the notification processor."""
+    async def _start(self) -> float:
+        """Setup the notification processor.
+
+        Returns the next renewal call at time.
+        """
         device = self._device
         logger.debug("%s: Setup the notification manager", device.host)
         notify_service = await device.create_notification_service()
         time_str = device.get_next_termination_time(self._interval)
-        notify_subscribe = await notify_service.Subscribe(
+        result = await notify_service.Subscribe(
             {
                 "InitialTerminationTime": time_str,
                 "ConsumerReference": {"Address": self._address},
@@ -422,7 +438,7 @@ class NotificationManager:
         # pylint: disable=protected-access
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
-        ] = notify_subscribe.SubscriptionReference.Address._value_1
+        ] = result.SubscriptionReference.Address._value_1
         # Create subscription manager
         # 5.2.3 BASIC NOTIFICATION INTERFACE - NOTIFY
         # Call SetSynchronizationPoint to generate a notification message
@@ -445,37 +461,52 @@ class NotificationManager:
         )
         if device.has_broken_relative_time(
             self._interval,
-            notify_subscribe.CurrentTime,
-            notify_subscribe.TerminationTime,
+            result.CurrentTime,
+            result.TerminationTime,
         ):
             # If we determine the device has broken relative timestamps, we switch
             # to using absolute timestamps and renew the subscription.
-            await self._webhook_subscription.Renew(
+            result = await self._webhook_subscription.Renew(
                 device.get_next_termination_time(self._interval)
             )
-        return self._webhook_subscription
-
-    async def start(self) -> None:
-        """Start the notification processor."""
+        renewal_call_at = self._calculate_next_renewal_call_at(result)
         logger.debug("%s: Start the notification manager", self._device.host)
         assert self._service, "Call setup first"
         try:
             await self._service.SetSynchronizationPoint()
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
+        return renewal_call_at
+
+    async def start(self) -> None:
+        """Setup the notification processor."""
+        renewal_call_at = await self._start()
+        self._schedule_webhook_renew(renewal_call_at)
+        return self._webhook_subscription
 
     async def stop(self) -> None:
         """Stop the notification processor."""
         logger.debug("%s: Stop the notification manager", self._device.host)
+        self._cancel_renewals()
         assert self._webhook_subscription, "Call start first"
         await self._webhook_subscription.Unsubscribe()
 
-    async def renew(self) -> Any:
+    async def shutdown(self) -> None:
+        """Shutdown the notification processor."""
+        self._shutdown = True
+        if self._restart_or_renew_task:
+            self._restart_or_renew_task.cancel()
+        logger.debug("%s: Shutdown the notification manager", self._device.host)
+        await self.stop()
+
+    async def renew(self) -> dt.timedelta:
         """Renew the notification subscription."""
         device = self._device
         logger.debug("%s: Renew the notification manager", device.host)
-        return await self._webhook_subscription.Renew(
-            device.get_next_termination_time(self._interval)
+        return self._calculate_next_renewal_call_at(
+            await self._webhook_subscription.Renew(
+                device.get_next_termination_time(self._interval)
+            )
         )
 
     def process(self, content: bytes) -> Optional[Any]:
@@ -493,6 +524,80 @@ class NotificationManager:
             logger.error("Received invalid XML: %s", exc)
             return None
         return self._operation.process_reply(envelope)
+
+    def _cancel_renewals(self) -> None:
+        """Cancel any pending renewals."""
+        if self._cancel_webhook_renew:
+            self._cancel_webhook_renew()
+            self._cancel_webhook_renew = None
+
+    def _calculate_next_renewal_call_at(self, result: Any | None) -> float:
+        """Calculate the next renewal call_at."""
+        current_time: dt.datetime | None = result.CurrentTime
+        termination_time: dt.datetime | None = result.TerminationTime
+        if termination_time and current_time:
+            delay = termination_time - current_time
+        else:
+            delay = self._interval
+        return self._loop.time() + delay.total_seconds() * _RENEWAL_PERCENTAGE
+
+    def _schedule_webhook_renew(self, when: float) -> None:
+        """Schedule webhook subscription renewal."""
+        self._cancel_renewals()
+        self._cancel_webhook_renew = self._loop.call_at(
+            when,
+            self._run_restart_or_renew,
+        )
+
+    def _run_restart_or_renew(self) -> None:
+        """Create a background task."""
+        if self._restart_or_renew_task and not self._restart_or_renew_task.done():
+            logger.debug("%s: Webhook renew already in progress", self._device.host)
+            return
+        self._restart_or_renew_task = asyncio.create_task(
+            self._renew_or_restart_webhook()
+        )
+
+    async def _restart_webhook(self) -> bool:
+        """Restart the webhook subscription assuming the camera rebooted."""
+        self._cancel_renewals()
+        return await self._start()
+
+    @retry_connection_error()
+    async def _call_webhook_subscription_renew(self) -> float:
+        """Call PullPoint subscription Renew."""
+        return await self.renew()
+
+    async def _renew_webhook(self) -> float | None:
+        """Renew webhook subscription."""
+        if self.closed or self._shutdown:
+            return None
+        try:
+            return await self._call_webhook_subscription_renew()
+        except RENEW_ERRORS as err:
+            self._subscription_lost_callback()
+            logger.debug(
+                "%s: Failed to renew webhook subscription %s",
+                self._device.host,
+                stringify_onvif_error(err),
+            )
+        return None
+
+    async def _renew_or_restart_webhook(self, now: dt.datetime | None = None) -> None:
+        """Renew or start webhook subscription."""
+        if self._shutdown:
+            return
+        renewal_call_at = None
+        try:
+            renewal_call_at = (
+                await self._renew_webhook() or await self._restart_webhook()
+            )
+        finally:
+            self._schedule_webhook_renew(
+                renewal_call_at
+                or self._loop.time()
+                + SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR.total_seconds()
+            )
 
 
 class PullPointManager:
@@ -573,6 +678,7 @@ class PullPointManager:
         return await self._pullpoint_subscription.Renew(
             device.get_next_termination_time(self._interval)
         )
+
 
 _utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
 
@@ -747,11 +853,10 @@ class ONVIFCamera:
         return manager
 
     async def create_notification_manager(
-        self, address: str, interval: dt.timedelta
+        self, address: str, interval: dt.timedelta, subscription_lost_callback: Callable[[], None]
     ) -> NotificationManager:
         """Create a notification manager."""
-        manager = NotificationManager(self, address, interval)
-        await manager.setup()
+        manager = NotificationManager(self, address, interval, subscription_lost_callback)
         await manager.start()
         return manager
 

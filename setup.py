@@ -40,7 +40,7 @@ setup(
     keywords=["ONVIF", "Camera", "IPC"],
     url="http://github.com/hunterjm/python-onvif-zeep-async",
     zip_safe=False,
-    python_requires=">=3",
+    python_requires=">=3.9",
     packages=find_packages(exclude=["docs", "examples", "tests"]),
     install_requires=requires,
     package_data={
