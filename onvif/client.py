@@ -411,7 +411,7 @@ class NotificationManager:
         # If this fails this is OK as it just means we will switch
         # to webhook later when the first notification is received.
         # WSAs enabled per
-        # https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513        
+        # https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         service = await self._device.create_onvif_service(
             "pullpoint", port_type="NotificationConsumer", enable_wsa=True
         )
@@ -778,7 +778,9 @@ class ONVIFCamera:
         WSAs enabled per
         https://github.com/home-assistant/core/issues/83524 https://github.com/home-assistant/core/issues/45513
         """
-        return await self.create_onvif_service("subscription", port_type=port_type, enable_wsa=True)
+        return await self.create_onvif_service(
+            "subscription", port_type=port_type, enable_wsa=True
+        )
 
     async def create_receiver_service(self) -> ONVIFService:
         """Service creation helper."""
