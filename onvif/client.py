@@ -412,9 +412,7 @@ class NotificationManager:
         logger.debug("%s: Setup the notification manager", self._device.host)
         device = self._device
         notify_service = await device.create_notification_service()
-        expected_termination_time, time_str = device.get_next_termination_time(
-            self._interval
-        )
+        time_str = device.get_next_termination_time(self._interval)
         notify_subscribe = await notify_service.Subscribe(
             {
                 "InitialTerminationTime": time_str,
@@ -445,7 +443,9 @@ class NotificationManager:
             "NotificationConsumer"
         )
         if device.has_broken_relative_time(
-            self._interval, expected_termination_time, notify_subscribe.TerminationTime
+            self._interval,
+            notify_subscribe.CurrentTime,
+            notify_subscribe.TerminationTime,
         ):
             await self.renew()
         return self._webhook_subscription
@@ -468,8 +468,9 @@ class NotificationManager:
     async def renew(self) -> Any:
         """Renew the notification subscription."""
         logger.debug("%s: Renew the notification manager", self._device.host)
-        _, time_str = self._device.get_next_termination_time(self._interval)
-        return await self._webhook_subscription.Renew(time_str)
+        return await self._webhook_subscription.Renew(
+            self._device.get_next_termination_time(self._interval)
+        )
 
     def process(self, content: bytes) -> Optional[Any]:
         """Process a notification message."""
@@ -512,12 +513,11 @@ class PullPointManager:
         logger.debug("%s: Setup the PullPoint manager", self._device.host)
         device = self._device
         events_service = await device.create_events_service()
-        expected_termination_time, time_str = device.get_next_termination_time(
-            self._interval
-        )
         pullpoint = await events_service.CreatePullPointSubscription(
             {
-                "InitialTerminationTime": time_str,
+                "InitialTerminationTime": device.get_next_termination_time(
+                    self._interval
+                ),
             }
         )
         # pylint: disable=protected-access
@@ -531,7 +531,7 @@ class PullPointManager:
         # Create the service that will be used to pull messages from the device.
         self._service = await self._device.create_pullpoint_service()
         if device.has_broken_relative_time(
-            self._interval, expected_termination_time, pullpoint.TerminationTime
+            self._interval, pullpoint.CurrentTime, pullpoint.TerminationTime
         ):
             await self.renew()
         return self._pullpoint_subscription
@@ -559,8 +559,9 @@ class PullPointManager:
     async def renew(self) -> Any:
         """Renew the notification subscription."""
         logger.debug("%s: Renew the PullPoint manager", self._device.host)
-        _, time_str = self._device.get_next_termination_time(self._interval)
-        return await self._pullpoint_subscription.Renew(time_str)
+        return await self._pullpoint_subscription.Renew(
+            self._device.get_next_termination_time(self._interval)
+        )
 
 
 _utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
@@ -669,47 +670,56 @@ class ONVIFCamera:
 
     def has_broken_relative_time(
         self,
-        interval: dt.timedelta,
-        expected: dt.datetime,
-        actual: dt.datetime | None,
+        expected_interval: dt.timedelta,
+        current_time: dt.datetime | None,
+        termination_time: dt.datetime | None,
     ) -> bool:
         """Mark timestamps as broken if a subscribe request returns an unexpected result."""
         logger.debug(
-            "%s: Checking for broken relative timestamps: interval: %s, expected: %s, actual: %s",
+            "%s: Checking for broken relative timestamps: expected_interval: %s, current_time: %s, termination_time: %s",
             self.host,
-            interval,
-            expected,
-            actual,
+            expected_interval,
+            current_time,
+            termination_time,
         )
-        if not actual:
-            logger.debug("%s: No termination time", self.host)
+        if not current_time:
+            logger.debug("%s: Device returned no current time", self.host)
             return False
-        if actual.tzinfo is None:
-            logger.debug("%s: No timezone info", self.host)
+        if not termination_time:
+            logger.debug("%s: Device returned no current time", self.host)
             return False
-        if abs((actual - expected).total_seconds()) > (interval.total_seconds() / 2):
+        if current_time.tzinfo is None:
+            logger.debug(
+                "%s: Device returned no timezone info for current time", self.host
+            )
+            return False
+        if termination_time.tzinfo is None:
+            logger.debug(
+                "%s: Device returned no timezone info for termination time", self.host
+            )
+            return False
+        actual_interval = termination_time - current_time
+        if abs(actual_interval.total_seconds()) > (
+            expected_interval.total_seconds() / 2
+        ):
             logger.warning(
-                "%s: Broken relative timestamps detected: expected: %s, actual: %s",
+                "%s: Broken relative timestamps detected: expected interval: %s, actual interval: %s",
                 self.host,
-                expected,
-                actual,
+                expected_interval,
+                actual_interval,
             )
             return True
         logger.debug("%s: Relative timestamps OK", self.host)
         return False
 
-    def get_next_termination_time(
-        self, duration: dt.timedelta
-    ) -> Tuple[dt.datetime, str]:
+    def get_next_termination_time(self, duration: dt.timedelta) -> str:
         """Calculate subscription absolute termination time."""
+        if not self._has_broken_relative_timestamps:
+            return absolute_time, f"PT{int(duration.total_seconds())}S"
         absolute_time: dt.datetime = _utcnow() + duration
         if dt_diff := self.dt_diff:
             absolute_time += dt_diff
-        if not self._has_broken_relative_timestamps:
-            return absolute_time, f"PT{int(duration.total_seconds())}S"
-        return absolute_time, absolute_time.isoformat(timespec="seconds").replace(
-            "+00:00", "Z"
-        )
+        return absolute_time.isoformat(timespec="seconds").replace("+00:00", "Z")
 
     async def create_pullpoint_manager(
         self, interval: dt.timedelta
