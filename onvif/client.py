@@ -405,6 +405,7 @@ class NotificationManager:
         self._loop = asyncio.get_event_loop()
         self._shutdown = False
         self._subscription_lost_callback = subscription_lost_callback
+        self._cancel_subscription_renew: Optional[asyncio.TimerHandle] = None
 
     @property
     def closed(self) -> bool:
