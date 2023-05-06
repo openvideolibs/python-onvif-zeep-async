@@ -474,15 +474,6 @@ class NotificationManager:
         """Renew the notification subscription."""
         device = self._device
         logger.debug("%s: Renew the notification manager", device.host)
-        renewal = await self._webhook_subscription.Renew(
-            device.get_next_termination_time(self._interval)
-        )
-        if not device.has_broken_relative_time(
-            self._interval, renewal.CurrentTime, renewal.TerminationTime
-        ):
-            return renewal
-        # If we determine the device has broken relative timestamps, we switch
-        # to using absolute timestamps and renew the subscription again.
         return await self._webhook_subscription.Renew(
             device.get_next_termination_time(self._interval)
         )
@@ -579,19 +570,9 @@ class PullPointManager:
         """Renew the notification subscription."""
         device = self._device
         logger.debug("%s: Renew the PullPoint manager", device.host)
-        renewal = await self._pullpoint_subscription.Renew(
-            device.get_next_termination_time(self._interval)
-        )
-        if not device.has_broken_relative_time(
-            self._interval, renewal.CurrentTime, renewal.TerminationTime
-        ):
-            return renewal
-        # If we determine the device has broken relative timestamps, we switch
-        # to using absolute timestamps and renew the subscription again.
         return await self._pullpoint_subscription.Renew(
             device.get_next_termination_time(self._interval)
         )
-
 
 _utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
 
