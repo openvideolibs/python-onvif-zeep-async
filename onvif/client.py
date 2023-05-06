@@ -252,6 +252,7 @@ class ONVIFService:
         binding_key="",
         read_timeout: Optional[int] = None,
         write_timeout: Optional[int] = None,
+        enable_wsa: bool = False,
     ) -> None:
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -296,6 +297,7 @@ class ONVIFService:
         self.ws_client: Optional[AsyncServiceProxy] = None
         self.create_type: Optional[Callable] = None
         self.loop = asyncio.get_event_loop()
+        self._enable_wsa = enable_wsa
 
     async def setup(self):
         """Setup the transport."""
@@ -307,11 +309,15 @@ class ONVIFService:
         self.document = await self.loop.run_in_executor(
             None, _cached_document, self.url
         )
+        # Some cameras never return a response to GetCapabilities if WS-Addressing is enabled
+        # but some cameras require WS-Addressing to be enabled for PullPoint or events to work
+        # so we have a flag to enable/disable it which can be changed per service.
+        plugins = [WsAddressingPlugin()] if self._enable_wsa else []
         self.zeep_client_authless = ZeepAsyncClient(
             wsdl=self.document,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=plugins,
         )
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
@@ -321,7 +327,7 @@ class ONVIFService:
             wsse=wsse,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=plugins,
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
         namespace = binding_name[binding_name.find("{") + 1 : binding_name.find("}")]
@@ -716,7 +722,7 @@ class ONVIFCamera:
 
     async def create_events_service(self) -> ONVIFService:
         """Service creation helper."""
-        return await self.create_onvif_service("events")
+        return await self.create_onvif_service("events", enable_wsa=True)
 
     async def create_analytics_service(self) -> ONVIFService:
         """Service creation helper."""
@@ -741,17 +747,20 @@ class ONVIFCamera:
             port_type="PullPointSubscription",
             read_timeout=_PULLPOINT_TIMEOUT,
             write_timeout=_PULLPOINT_TIMEOUT,
+            enable_wsa=True,
         )
 
     async def create_notification_service(self) -> ONVIFService:
         """Service creation helper."""
-        return await self.create_onvif_service("notification")
+        return await self.create_onvif_service("notification", enable_wsa=True)
 
     async def create_subscription_service(
         self, port_type: Optional[str] = None
     ) -> ONVIFService:
         """Service creation helper."""
-        return await self.create_onvif_service("subscription", port_type=port_type)
+        return await self.create_onvif_service(
+            "subscription", port_type=port_type, enable_wsa=True
+        )
 
     async def create_receiver_service(self) -> ONVIFService:
         """Service creation helper."""
