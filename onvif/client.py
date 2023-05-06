@@ -7,7 +7,7 @@ import logging
 import os.path
 import ssl
 from typing import Any, Awaitable, Callable, Dict, Optional, ParamSpec, Tuple, TypeVar
-
+from functools import partial
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
 from zeep.cache import SqliteCache
@@ -388,19 +388,28 @@ class ONVIFService:
 class NotificationManager:
     """Manager to process notifications."""
 
-    def __init__(self, device: "ONVIFCamera", config: Dict[str, Any]) -> None:
-        """Initialize the notification processor."""
+    def __init__(self, device: "ONVIFCamera", interval: dt.timedelta) -> None:
+        """Initialize the PullPoint processor."""
         self._service: Optional[ONVIFService] = None
         self._operation: Optional[SoapOperation] = None
         self._device = device
-        self._config = config
+        self._interval = interval
 
     async def setup(self) -> ONVIFService:
         """Setup the notification processor."""
-        notify_service = await self._device.create_notification_service()
-        notify_subscribe = await notify_service.Subscribe(self._config)
+        device = self._device
+        notify_service = await device.create_notification_service()
+        expected_termination_time, time_str = device.get_next_termination_time(
+            self._interval
+        )
+        notify_subscribe = await notify_service.Subscribe(
+            {
+                "InitialTerminationTime": time_str,
+                "ConsumerReference": {"Address": self._address},
+            }
+        )
         # pylint: disable=protected-access
-        self._device.xaddrs[
+        device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
         ] = notify_subscribe.SubscriptionReference.Address._value_1
         # Create subscription manager
@@ -419,7 +428,14 @@ class NotificationManager:
             "PullMessages"
         )
         self._service = service
-        return await self._device.create_subscription_service("NotificationConsumer")
+        self._webhook_subscription = await self._device.create_subscription_service(
+            "NotificationConsumer"
+        )
+        if device.check_for_broken_relative_timestamps(
+            expected_termination_time, notify_subscribe.TerminationTime
+        ):
+            await self.renew()
+        return self._webhook_subscription
 
     async def start(self) -> None:
         """Start the notification processor."""
@@ -428,6 +444,12 @@ class NotificationManager:
             await self._service.SetSynchronizationPoint()
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
+
+    async def renew(self) -> Any:
+        """Renew the notification subscription."""
+        device = self._device
+        _, time_str = device.get_next_termination_time(self._interval)
+        return await self._webhook_subscription.Renew(time_str)
 
     def process(self, content: bytes) -> Optional[Any]:
         """Process a notification message."""
@@ -444,6 +466,9 @@ class NotificationManager:
             logger.error("Received invalid XML: %s", exc)
             return None
         return self._operation.process_reply(envelope)
+
+
+_utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
 
 
 class ONVIFCamera:
@@ -490,6 +515,7 @@ class ONVIFCamera:
         self.adjust_time = adjust_time
         self.dt_diff = None
         self.xaddrs = {}
+        self._has_broken_relative_timestamps: bool = False
         self._capabilities: Optional[Dict[str, Any]] = None
 
         # Active service client container
@@ -546,6 +572,34 @@ class ONVIFCamera:
         except Exception:
             logger.exception("Failed to parse capabilities")
 
+    def check_for_broken_relative_timestamps(
+        self, absolute_time: dt.datetime, termination_time: dt.datetime | None
+    ) -> bool:
+        """Mark timestamps as broken if a renew or subscribe request returns an unexpected result."""
+        import pprint
+
+        pprint.pprint(
+            [
+                "expected termination time",
+                absolute_time,
+                "actual termination time",
+                termination_time,
+            ]
+        )
+
+    def get_next_termination_time(
+        self, duration: dt.timedelta
+    ) -> Tuple[dt.datetime, str]:
+        """Calculate subscription absolute termination time."""
+        absolute_time: dt.datetime = _utcnow() + duration
+        if dt_diff := self.dt_diff:
+            absolute_time += dt_diff
+        if not self._has_broken_relative_timestamps:
+            return absolute_time, f"PT{duration.total_seconds()}S"
+        return absolute_time, absolute_time.isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        )
+
     async def create_pullpoint_subscription(
         self, config: Optional[Dict[str, Any]] = None
     ) -> bool:
@@ -562,10 +616,10 @@ class ONVIFCamera:
         return True
 
     def create_notification_manager(
-        self, config: Optional[Dict[str, Any]] = None
+        self, address: str, interval: dt.timedelta
     ) -> NotificationManager:
         """Create a notification manager."""
-        return NotificationManager(self, config)
+        return NotificationManager(self, address, interval)
 
     async def close(self) -> None:
         """Close all transports."""
