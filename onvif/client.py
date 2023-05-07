@@ -391,7 +391,11 @@ class NotificationManager:
     """Manager to process notifications."""
 
     def __init__(
-        self, device: "ONVIFCamera", address: str, interval: dt.timedelta, subscription_lost_callback: Callable[[], None]
+        self,
+        device: "ONVIFCamera",
+        address: str,
+        interval: dt.timedelta,
+        subscription_lost_callback: Callable[[], None],
     ) -> None:
         """Initialize the notification processor."""
         self._service: Optional[ONVIFService] = None
@@ -531,7 +535,13 @@ class NotificationManager:
             delay = termination_time - current_time
         else:
             delay = self._interval
-        return self._loop.time() + delay.total_seconds() * _RENEWAL_PERCENTAGE
+        delay_seconds = delay.total_seconds() * _RENEWAL_PERCENTAGE
+        logger.debug(
+            "%s: Renew notification subscription in %s seconds",
+            self._device.host,
+            delay_seconds,
+        )
+        return self._loop.time() + delay_seconds
 
     def _schedule_subscription_renew(self, when: float) -> None:
         """Schedule notify subscription renewal."""
@@ -575,7 +585,9 @@ class NotificationManager:
             )
         return None
 
-    async def _renew_or_restart_subscription(self, now: dt.datetime | None = None) -> None:
+    async def _renew_or_restart_subscription(
+        self, now: dt.datetime | None = None
+    ) -> None:
         """Renew or start notify subscription."""
         if self._shutdown:
             return
@@ -845,10 +857,15 @@ class ONVIFCamera:
         return manager
 
     async def create_notification_manager(
-        self, address: str, interval: dt.timedelta, subscription_lost_callback: Callable[[], None]
+        self,
+        address: str,
+        interval: dt.timedelta,
+        subscription_lost_callback: Callable[[], None],
     ) -> NotificationManager:
         """Create a notification manager."""
-        manager = NotificationManager(self, address, interval, subscription_lost_callback)
+        manager = NotificationManager(
+            self, address, interval, subscription_lost_callback
+        )
         await manager.start()
         return manager
 
