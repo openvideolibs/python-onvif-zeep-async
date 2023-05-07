@@ -435,6 +435,14 @@ class BaseManager:
         self._schedule_subscription_renew(renewal_call_at)
         return self._subscription
 
+    def pause(self) -> None:
+        """Pause the notification processor."""
+        self._cancel_renewals()
+
+    def resume(self) -> None:
+        """Pause the notification processor."""
+        self._schedule_subscription_renew(self._loop.time())
+
     async def stop(self) -> None:
         """Stop the notification processor."""
         logger.debug("%s: Stop the notification manager", self._device.host)
