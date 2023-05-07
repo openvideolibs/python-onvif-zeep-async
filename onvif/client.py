@@ -440,7 +440,7 @@ class BaseManager:
         self._cancel_renewals()
 
     def resume(self) -> None:
-        """Pause the notification processor."""
+        """Resume the notification processor."""
         self._schedule_subscription_renew(self._loop.time())
 
     async def stop(self) -> None:
@@ -852,10 +852,12 @@ class ONVIFCamera:
         return absolute_time.isoformat(timespec="seconds").replace("+00:00", "Z")
 
     async def create_pullpoint_manager(
-        self, interval: dt.timedelta
+        self,
+        interval: dt.timedelta,
+        subscription_lost_callback: Callable[[], None],
     ) -> PullPointManager:
         """Create a pullpoint manager."""
-        manager = PullPointManager(self, interval)
+        manager = PullPointManager(self, interval, subscription_lost_callback)
         await manager.start()
         return manager
 
