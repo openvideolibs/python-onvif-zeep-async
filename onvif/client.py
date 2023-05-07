@@ -25,6 +25,7 @@ from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
+from .const import KEEPALIVE_EXPIRY
 from .util import create_no_verify_ssl_context, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
 
@@ -39,7 +40,7 @@ _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
-_HTTPX_LIMITS = httpx.Limits(keepalive_expiry=4)
+_HTTPX_LIMITS = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY)
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
 
