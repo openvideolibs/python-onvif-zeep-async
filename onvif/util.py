@@ -1,10 +1,21 @@
 """ONVIF util."""
 from __future__ import annotations
 
+import contextlib
+import datetime as dt
+from functools import lru_cache, partial
+import os
+import ssl
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from zeep.exceptions import Fault
+
+utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
+
+# This does blocking I/O (stat) so we cache the result
+# to minimize the impact of the blocking I/O.
+path_isfile = lru_cache(maxsize=128)(os.path.isfile)
 
 
 def normalize_url(url: str) -> str:
@@ -67,3 +78,22 @@ def is_auth_error(error: Exception) -> bool:
         )
         or "auth" in stringify_onvif_error(error).lower()
     )
+
+
+def create_no_verify_ssl_context() -> ssl.SSLContext:
+    """Return an SSL context that does not verify the server certificate.
+    This is a copy of aiohttp's create_default_context() function, with the
+    ssl verify turned off and old SSL versions enabled.
+
+    https://github.com/aio-libs/aiohttp/blob/33953f110e97eecc707e1402daa8d543f38a189b/aiohttp/connector.py#L911
+    """
+    sslcontext = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    sslcontext.check_hostname = False
+    sslcontext.verify_mode = ssl.CERT_NONE
+    # Allow all ciphers rather than only Python 3.10 default
+    sslcontext.set_ciphers("DEFAULT")
+    with contextlib.suppress(AttributeError):
+        # This only works for OpenSSL >= 1.0.0
+        sslcontext.options |= ssl.OP_NO_COMPRESSION
+    sslcontext.set_default_verify_paths()
+    return sslcontext
