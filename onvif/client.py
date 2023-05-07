@@ -415,13 +415,41 @@ class BaseManager:
         """Return True if the manager is closed."""
         return not self._subscription or self._subscription.transport.client.is_closed
 
+    async def start(self) -> None:
+        """Setup the manager."""
+        renewal_call_at = await self._start()
+        self._schedule_subscription_renew(renewal_call_at)
+        return self._subscription
+
+    def pause(self) -> None:
+        """Pause the manager."""
+        self._cancel_renewals()
+
+    def resume(self) -> None:
+        """Resume the manager."""
+        self._schedule_subscription_renew(self._loop.time())
+
+    async def stop(self) -> None:
+        """Stop the manager."""
+        logger.debug("%s: Stop the notification manager", self._device.host)
+        self._cancel_renewals()
+        assert self._subscription, "Call start first"
+        await self._subscription.Unsubscribe()
+
+    async def shutdown(self) -> None:
+        """Shutdown the manager.
+
+        This method is irreversible.
+        """
+        self._shutdown = True
+        if self._restart_or_renew_task:
+            self._restart_or_renew_task.cancel()
+        logger.debug("%s: Shutdown the notification manager", self._device.host)
+        await self.stop()
+
     @abstractmethod
     async def _start(self) -> float:
-        """Setup the processor.
-
-        Returns the next renewal call at time.
-
-        """
+        """Setup the processor. Returns the next renewal call at time."""
 
     async def _set_synchronization_point(self, service: ONVIFService) -> float:
         """Set the synchronization point."""
@@ -429,45 +457,6 @@ class BaseManager:
             await service.SetSynchronizationPoint()
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
-
-    async def start(self) -> None:
-        """Setup the notification processor."""
-        renewal_call_at = await self._start()
-        self._schedule_subscription_renew(renewal_call_at)
-        return self._subscription
-
-    def pause(self) -> None:
-        """Pause the notification processor."""
-        self._cancel_renewals()
-
-    def resume(self) -> None:
-        """Resume the notification processor."""
-        self._schedule_subscription_renew(self._loop.time())
-
-    async def stop(self) -> None:
-        """Stop the notification processor."""
-        logger.debug("%s: Stop the notification manager", self._device.host)
-        self._cancel_renewals()
-        assert self._subscription, "Call start first"
-        await self._subscription.Unsubscribe()
-
-    async def shutdown(self) -> None:
-        """Shutdown the notification processor."""
-        self._shutdown = True
-        if self._restart_or_renew_task:
-            self._restart_or_renew_task.cancel()
-        logger.debug("%s: Shutdown the notification manager", self._device.host)
-        await self.stop()
-
-    async def renew(self) -> float:
-        """Renew the notification subscription."""
-        device = self._device
-        logger.debug("%s: Renew the notification manager", device.host)
-        return self._calculate_next_renewal_call_at(
-            await self._subscription.Renew(
-                device.get_next_termination_time(self._interval)
-            )
-        )
 
     def _cancel_renewals(self) -> None:
         """Cancel any pending renewals."""
@@ -516,7 +505,13 @@ class BaseManager:
     @retry_connection_error()
     async def _call_subscription_renew(self) -> float:
         """Call notify subscription Renew."""
-        return await self.renew()
+        device = self._device
+        logger.debug("%s: Renew the notification manager", device.host)
+        return self._calculate_next_renewal_call_at(
+            await self._subscription.Renew(
+                device.get_next_termination_time(self._interval)
+            )
+        )
 
     async def _renew_subscription(self) -> float | None:
         """Renew notify subscription."""
@@ -533,9 +528,7 @@ class BaseManager:
             )
         return None
 
-    async def _renew_or_restart_subscription(
-        self, now: dt.datetime | None = None
-    ) -> None:
+    async def _renew_or_restart_subscription(self) -> None:
         """Renew or start notify subscription."""
         if self._shutdown:
             return
