@@ -2,8 +2,23 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 from zeep.exceptions import Fault
+
+
+def normalize_url(url: str) -> str:
+    """Normalize URL.
+
+    Some cameras respond with <wsa5:Address>http://192.168.1.106:8106:8106/onvif/Subscription?Idx=43</wsa5:Address>
+    https://github.com/home-assistant/core/issues/92603#issuecomment-1537213126
+    """
+    parsed = urlparse(url)
+    if "[" not in parsed.netloc and parsed.netloc.count(":") > 1:
+        net_location = parsed.netloc.split(":", 3)
+        net_location.pop()
+        return urlunparse(parsed._replace(netloc=":".join(net_location)))
+    return url
 
 
 def extract_subcodes_as_strings(subcodes: Any) -> list[str]:

@@ -29,7 +29,7 @@ from zeep.wsse.username import UsernameToken
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
-from .util import extract_subcodes_as_strings, is_auth_error, stringify_onvif_error
+from .util import normalize_url, stringify_onvif_error
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -577,7 +577,7 @@ class NotificationManager(BaseManager):
         # pylint: disable=protected-access
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
-        ] = result.SubscriptionReference.Address._value_1
+        ] = normalize_url(result.SubscriptionReference.Address._value_1)
         # Create subscription manager
         # 5.2.3 BASIC NOTIFICATION INTERFACE - NOTIFY
         # Call SetSynchronizationPoint to generate a notification message
@@ -657,7 +657,7 @@ class PullPointManager(BaseManager):
         # pylint: disable=protected-access
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
-        ] = result.SubscriptionReference.Address._value_1
+        ] = normalize_url(result.SubscriptionReference.Address._value_1)
         # Create subscription manager
         self._subscription = await device.create_subscription_service(
             "PullPointSubscription"
