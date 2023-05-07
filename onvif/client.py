@@ -471,7 +471,7 @@ class BaseManager:
     def _cancel_renewals(self) -> None:
         """Cancel any pending renewals."""
         if self._cancel_subscription_renew:
-            self._cancel_subscription_renew()
+            self._cancel_subscription_renew.cancel()
             self._cancel_subscription_renew = None
 
     def _calculate_next_renewal_call_at(self, result: Any | None) -> float:
