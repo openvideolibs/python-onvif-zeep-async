@@ -52,6 +52,7 @@ class BaseManager:
         self._shutdown = False
         self._subscription_lost_callback = subscription_lost_callback
         self._cancel_subscription_renew: asyncio.TimerHandle | None = None
+        self._service: ONVIFService | None = None
 
     @property
     def closed(self) -> bool:
@@ -94,10 +95,10 @@ class BaseManager:
     async def _start(self) -> float:
         """Setup the processor. Returns the next renewal call at time."""
 
-    async def _set_synchronization_point(self, service: ONVIFService) -> float:
+    async def set_synchronization_point(self) -> float:
         """Set the synchronization point."""
         try:
-            await service.SetSynchronizationPoint()
+            await self._service.SetSynchronizationPoint()
         except (Fault, asyncio.TimeoutError, TransportError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
 
@@ -229,12 +230,12 @@ class NotificationManager(BaseManager):
         #
         # If this fails this is OK as it just means we will switch
         # to webhook later when the first notification is received.
-        service = await self._device.create_onvif_service(
+        self._service = await self._device.create_onvif_service(
             "pullpoint", port_type="NotificationConsumer"
         )
-        self._operation = service.document.bindings[service.binding_name].get(
-            "PullMessages"
-        )
+        self._operation = self._service.document.bindings[
+            self._service.binding_name
+        ].get("PullMessages")
         self._subscription = await device.create_subscription_service(
             "NotificationConsumer"
         )
@@ -250,7 +251,6 @@ class NotificationManager(BaseManager):
             )
         renewal_call_at = self._calculate_next_renewal_call_at(result)
         logger.debug("%s: Start the notification manager", self._device.host)
-        await self._set_synchronization_point(service)
         return renewal_call_at
 
     def process(self, content: bytes) -> Any | None:
@@ -272,16 +272,6 @@ class NotificationManager(BaseManager):
 
 class PullPointManager(BaseManager):
     """Manager for PullPoint."""
-
-    def __init__(
-        self,
-        device: ONVIFCamera,
-        interval: dt.timedelta,
-        subscription_lost_callback: Callable[[], None],
-    ) -> None:
-        """Initialize the PullPoint processor."""
-        super().__init__(device, interval, subscription_lost_callback)
-        self._service: ONVIFService | None = None
 
     async def _start(self) -> float:
         """Start the PullPoint manager.
@@ -318,7 +308,6 @@ class PullPointManager(BaseManager):
             )
         renewal_call_at = self._calculate_next_renewal_call_at(result)
         logger.debug("%s: Start the notification manager", self._device.host)
-        await self._set_synchronization_point(self._service)
         return renewal_call_at
 
     def get_service(self) -> ONVIFService:
