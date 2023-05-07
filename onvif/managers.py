@@ -9,22 +9,19 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import httpx
 from httpx import TransportError
-from zeep.client import Settings
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
 from zeep.wsdl.bindings.soap import SoapOperation
 
 from onvif.exceptions import ONVIFError
 
+from .const import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
 from .util import normalize_url, stringify_onvif_error
 from .wrappers import retry_connection_error
 
 logger = logging.getLogger("onvif")
 
-_DEFAULT_SETTINGS = Settings()
-_DEFAULT_SETTINGS.strict = False
-_DEFAULT_SETTINGS.xml_huge_tree = True
 
 _RENEWAL_PERCENTAGE = 0.8
 
@@ -32,7 +29,6 @@ SUBSCRIPTION_ERRORS = (Fault, asyncio.TimeoutError, TransportError)
 RENEW_ERRORS = (ONVIFError, httpx.RequestError, XMLParseError, *SUBSCRIPTION_ERRORS)
 SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 
-DEFAULT_ATTEMPTS = 2
 
 if TYPE_CHECKING:
     from onvif.client import ONVIFCamera, ONVIFService
@@ -266,7 +262,7 @@ class NotificationManager(BaseManager):
             envelope = parse_xml(
                 content,  # type: ignore[arg-type]
                 ASYNC_TRANSPORT,
-                settings=_DEFAULT_SETTINGS,
+                settings=DEFAULT_SETTINGS,
             )
         except XMLSyntaxError as exc:
             logger.error("Received invalid XML: %s", exc)

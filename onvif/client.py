@@ -9,10 +9,9 @@ import os.path
 from typing import Any, Callable
 
 import httpx
-from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
+from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
-from zeep.client import AsyncClient as BaseZeepAsyncClient, Settings
-from zeep.exceptions import Fault, XMLParseError
+from zeep.client import AsyncClient as BaseZeepAsyncClient
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
@@ -27,30 +26,21 @@ from .managers import NotificationManager, PullPointManager
 from .transport import ASYNC_TRANSPORT
 from .util import create_no_verify_ssl_context, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
+from .const import DEFAULT_SETTINGS
+
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 
-_DEFAULT_SETTINGS = Settings()
-_DEFAULT_SETTINGS.strict = False
-_DEFAULT_SETTINGS.xml_huge_tree = True
 
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
-
 _DEFAULT_TIMEOUT = 90
 _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
-
-
-HTTPX_LIMITS = httpx.Limits(keepalive_expiry=4)
-
-SUBSCRIPTION_ERRORS = (Fault, asyncio.TimeoutError, TransportError)
-RENEW_ERRORS = (ONVIFError, httpx.RequestError, XMLParseError, *SUBSCRIPTION_ERRORS)
-SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
-
+_HTTPX_LIMITS = httpx.Limits(keepalive_expiry=4)
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
 
@@ -93,7 +83,7 @@ class UsernameDigestTokenDtDiff(UsernameToken):
 @lru_cache(maxsize=128)
 def _cached_document(url: str) -> Document:
     """Load external XML document from disk."""
-    return Document(url, ASYNC_TRANSPORT, settings=_DEFAULT_SETTINGS)
+    return Document(url, ASYNC_TRANSPORT, settings=DEFAULT_SETTINGS)
 
 
 class ZeepAsyncClient(BaseZeepAsyncClient):
@@ -181,13 +171,13 @@ class ONVIFService:
             write=write_timeout or _WRITE_TIMEOUT,
         )
         client = AsyncClient(
-            verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts, limits=HTTPX_LIMITS
+            verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts, limits=_HTTPX_LIMITS
         )
         # The wsdl client should never actually be used, but it is required
         # to avoid creating another ssl context since the underlying code
         # will try to create a new one if it doesn't exist.
         wsdl_client = httpx.Client(
-            verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts, limits=HTTPX_LIMITS
+            verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts, limits=_HTTPX_LIMITS
         )
         self.transport = (
             AsyncTransport(client=client, wsdl_client=wsdl_client)
@@ -206,7 +196,7 @@ class ONVIFService:
 
     async def setup(self):
         """Setup the transport."""
-        settings = _DEFAULT_SETTINGS
+        settings = DEFAULT_SETTINGS
         binding_name = self.binding_name
         wsse = UsernameDigestTokenDtDiff(
             self.user, self.passwd, dt_diff=self.dt_diff, use_digest=self.encrypt

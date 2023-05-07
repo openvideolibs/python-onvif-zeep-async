@@ -1,5 +1,9 @@
-"""ONVIF Client wrappers."""
+"""ONVIF constants."""
 
 DEFAULT_ATTEMPTS = 2
 KEEPALIVE_EXPIRY = 4
 BACKOFF_TIME = KEEPALIVE_EXPIRY + 0.5
+
+_DEFAULT_SETTINGS = Settings()
+_DEFAULT_SETTINGS.strict = False
+_DEFAULT_SETTINGS.xml_huge_tree = True
