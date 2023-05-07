@@ -26,7 +26,7 @@ from .const import KEEPALIVE_EXPIRY
 from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
-from .util import create_no_verify_ssl_context, path_isfile, utcnow
+from .util import create_no_verify_ssl_context, normalize_url, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
 
 logger = logging.getLogger("onvif")
@@ -473,7 +473,7 @@ class ONVIFCamera:
             req = media_service.create_type("GetSnapshotUri")
             req.ProfileToken = profile_token
             result = await media_service.GetSnapshotUri(req)
-            uri = result.Uri
+            uri = normalize_url(result.Uri)
             self._snapshot_uris[profile_token] = uri
         return uri
 
