@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from abc import abstractmethod
 import asyncio
+from collections.abc import Awaitable
 import contextlib
 import datetime as dt
 from functools import lru_cache, partial
 import logging
 import os.path
 import ssl
-from typing import Any, Awaitable, Callable, Dict, Optional, ParamSpec, Tuple, TypeVar
+from typing import Any, Callable, Dict, Optional, ParamSpec, Tuple, TypeVar
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth, TransportError
@@ -251,16 +252,16 @@ class ONVIFService:
     def __init__(
         self,
         xaddr: str,
-        user: Optional[str],
-        passwd: Optional[str],
+        user: str | None,
+        passwd: str | None,
         url: str,
         encrypt=True,
         no_cache=False,
         dt_diff=None,
         binding_name="",
         binding_key="",
-        read_timeout: Optional[int] = None,
-        write_timeout: Optional[int] = None,
+        read_timeout: int | None = None,
+        write_timeout: int | None = None,
     ) -> None:
         if not _path_isfile(url):
             raise ONVIFError("%s doesn`t exist!" % url)
@@ -298,12 +299,12 @@ class ONVIFService:
                 client=client, wsdl_client=wsdl_client, cache=SqliteCache()
             )
         )
-        self.document: Optional[Document] = None
-        self.zeep_client_authless: Optional[ZeepAsyncClient] = None
-        self.ws_client_authless: Optional[AsyncServiceProxy] = None
-        self.zeep_client: Optional[ZeepAsyncClient] = None
-        self.ws_client: Optional[AsyncServiceProxy] = None
-        self.create_type: Optional[Callable] = None
+        self.document: Document | None = None
+        self.zeep_client_authless: ZeepAsyncClient | None = None
+        self.ws_client_authless: AsyncServiceProxy | None = None
+        self.zeep_client: ZeepAsyncClient | None = None
+        self.ws_client: AsyncServiceProxy | None = None
+        self.create_type: Callable | None = None
         self.loop = asyncio.get_event_loop()
 
     async def setup(self):
@@ -393,21 +394,21 @@ class BaseManager:
 
     def __init__(
         self,
-        device: "ONVIFCamera",
+        device: ONVIFCamera,
         interval: dt.timedelta,
         subscription_lost_callback: Callable[[], None],
     ) -> None:
         """Initialize the notification processor."""
-        self._operation: Optional[SoapOperation] = None
+        self._operation: SoapOperation | None = None
         self._device = device
         self._interval = interval
         self._renew_lock = asyncio.Lock()
-        self._subscription: Optional[ONVIFService] = None
-        self._restart_or_renew_task: Optional[asyncio.Task] = None
+        self._subscription: ONVIFService | None = None
+        self._restart_or_renew_task: asyncio.Task | None = None
         self._loop = asyncio.get_event_loop()
         self._shutdown = False
         self._subscription_lost_callback = subscription_lost_callback
-        self._cancel_subscription_renew: Optional[asyncio.TimerHandle] = None
+        self._cancel_subscription_renew: asyncio.TimerHandle | None = None
 
     @property
     def closed(self) -> bool:
@@ -556,7 +557,7 @@ class NotificationManager(BaseManager):
 
     def __init__(
         self,
-        device: "ONVIFCamera",
+        device: ONVIFCamera,
         address: str,
         interval: dt.timedelta,
         subscription_lost_callback: Callable[[], None],
@@ -615,7 +616,7 @@ class NotificationManager(BaseManager):
         await self._set_synchronization_point(service)
         return renewal_call_at
 
-    def process(self, content: bytes) -> Optional[Any]:
+    def process(self, content: bytes) -> Any | None:
         """Process a notification message."""
         if not self._operation:
             logger.debug("%s: Notifications not setup", self._device.host)
@@ -637,13 +638,13 @@ class PullPointManager(BaseManager):
 
     def __init__(
         self,
-        device: "ONVIFCamera",
+        device: ONVIFCamera,
         interval: dt.timedelta,
         subscription_lost_callback: Callable[[], None],
     ) -> None:
         """Initialize the PullPoint processor."""
         super().__init__(device, interval, subscription_lost_callback)
-        self._service: Optional[ONVIFService] = None
+        self._service: ONVIFService | None = None
 
     async def _start(self) -> float:
         """Start the PullPoint manager.
@@ -716,8 +717,8 @@ class ONVIFCamera:
         self,
         host: str,
         port: int,
-        user: Optional[str],
-        passwd: Optional[str],
+        user: str | None,
+        passwd: str | None,
         wsdl_dir: str = _WSDL_PATH,
         encrypt=True,
         no_cache=False,
@@ -736,17 +737,17 @@ class ONVIFCamera:
         self.dt_diff = None
         self.xaddrs = {}
         self._has_broken_relative_timestamps: bool = False
-        self._capabilities: Optional[Dict[str, Any]] = None
+        self._capabilities: dict[str, Any] | None = None
 
         # Active service client container
-        self.services: Dict[Tuple[str, Optional[str]], ONVIFService] = {}
+        self.services: dict[tuple[str, str | None], ONVIFService] = {}
 
         self.to_dict = ONVIFService.to_dict
 
         self._snapshot_uris = {}
         self._snapshot_client = AsyncClient(verify=_NO_VERIFY_SSL_CONTEXT)
 
-    async def get_capabilities(self) -> Dict[str, Any]:
+    async def get_capabilities(self) -> dict[str, Any]:
         """Get device capabilities."""
         if self._capabilities is None:
             await self.update_xaddrs()
@@ -894,7 +895,7 @@ class ONVIFCamera:
 
     async def get_snapshot(
         self, profile_token: str, basic_auth: bool = False
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         """Get a snapshot image from the camera."""
         uri = await self.get_snapshot_uri(profile_token)
         if uri is None:
@@ -923,8 +924,8 @@ class ONVIFCamera:
         return None
 
     def get_definition(
-        self, name: str, port_type: Optional[str] = None
-    ) -> Tuple[str, str, str]:
+        self, name: str, port_type: str | None = None
+    ) -> tuple[str, str, str]:
         """Returns xaddr and wsdl of specified service"""
         # Check if the service is supported
         if name not in SERVICES:
@@ -961,9 +962,9 @@ class ONVIFCamera:
     async def create_onvif_service(
         self,
         name: str,
-        port_type: Optional[str] = None,
-        read_timeout: Optional[int] = None,
-        write_timeout: Optional[int] = None,
+        port_type: str | None = None,
+        read_timeout: int | None = None,
+        write_timeout: int | None = None,
     ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
@@ -1063,7 +1064,7 @@ class ONVIFCamera:
         return await self.create_onvif_service("notification")
 
     async def create_subscription_service(
-        self, port_type: Optional[str] = None
+        self, port_type: str | None = None
     ) -> ONVIFService:
         """Service creation helper."""
         return await self.create_onvif_service("subscription", port_type=port_type)
