@@ -22,12 +22,11 @@ from zeep.wsse.username import UsernameToken
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
+from .const import DEFAULT_SETTINGS
 from .managers import NotificationManager, PullPointManager
 from .transport import ASYNC_TRANSPORT
 from .util import create_no_verify_ssl_context, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
-from .const import DEFAULT_SETTINGS
-
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)

@@ -15,7 +15,7 @@ from zeep.wsdl.bindings.soap import SoapOperation
 
 from onvif.exceptions import ONVIFError
 
-from .const import DEFAULT_SETTINGS
+from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
 from .util import normalize_url, stringify_onvif_error
 from .wrappers import retry_connection_error
