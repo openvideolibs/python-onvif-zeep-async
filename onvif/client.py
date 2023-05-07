@@ -22,10 +22,10 @@ from zeep.wsse.username import UsernameToken
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
+from .const import KEEPALIVE_EXPIRY
 from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
-from .const import KEEPALIVE_EXPIRY
 from .util import create_no_verify_ssl_context, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
 
