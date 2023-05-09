@@ -369,7 +369,7 @@ class ONVIFCamera:
             try:
                 if name.lower() in SERVICES and capability is not None:
                     namespace = SERVICES[name.lower()]["ns"]
-                    self.xaddrs[namespace] = capability["XAddr"]
+                    self.xaddrs[namespace] = normalize_url(capability["XAddr"])
             except Exception:
                 logger.exception("Unexpected service type")
         try:
