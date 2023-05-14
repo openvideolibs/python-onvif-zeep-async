@@ -264,9 +264,16 @@ class NotificationManager(BaseManager):
                 ASYNC_TRANSPORT,
                 settings=DEFAULT_SETTINGS,
             )
-        except XMLSyntaxError as exc:
-            logger.error("Received invalid XML: %s", exc)
-            return None
+        except XMLSyntaxError:
+            try:
+                envelope = parse_xml(
+                    content.decode("utf-8", "replace").encode("utf-8"),
+                    ASYNC_TRANSPORT,
+                    settings=DEFAULT_SETTINGS,
+                )
+            except XMLSyntaxError as exc:
+                logger.error("Received invalid XML: %s (%s)", exc, content)
+                return None
         return self._operation.process_reply(envelope)
 
 
