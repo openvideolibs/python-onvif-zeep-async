@@ -26,6 +26,7 @@ from .const import KEEPALIVE_EXPIRY
 from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
+from .types import FastDateTime
 from .util import create_no_verify_ssl_context, normalize_url, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
 
@@ -80,10 +81,44 @@ class UsernameDigestTokenDtDiff(UsernameToken):
         return result
 
 
-@lru_cache(maxsize=128)
-def _cached_document(url: str) -> Document:
+_DOCUMENT_CACHE: dict[str, Document] = {}
+
+original_load = Document.load
+
+
+class DocumentWithDeferredLoad(Document):
+    def load(self, *args: Any, **kwargs: Any) -> None:
+        """Deferred load of the document."""
+
+    def original_load(self, *args: Any, **kwargs: Any) -> None:
+        """Original load of the document."""
+        return original_load(self, *args, **kwargs)
+
+
+async def _cached_document(url: str) -> Document:
     """Load external XML document from disk."""
-    return Document(url, ASYNC_TRANSPORT, settings=DEFAULT_SETTINGS)
+    if url in _DOCUMENT_CACHE:
+        return _DOCUMENT_CACHE[url]
+    loop = asyncio.get_event_loop()
+
+    def _load_document() -> DocumentWithDeferredLoad:
+        document = DocumentWithDeferredLoad(url, ASYNC_TRANSPORT, DEFAULT_SETTINGS)
+        # Override the default datetime type to use FastDateTime
+        # This is a workaround for the following issue:
+        # https://github.com/mvantellingen/python-zeep/pull/1370
+        schema = document.types.documents.get_by_namespace(
+            "http://www.w3.org/2001/XMLSchema", False
+        )[0]
+        instance = FastDateTime(is_global=True)
+        schema.register_type(FastDateTime._default_qname, instance)
+        document.types.add_documents([None], url)
+        # Perform the original load
+        document.original_load(url)
+        return document
+
+    document = await loop.run_in_executor(None, _load_document)
+    _DOCUMENT_CACHE[url] = document
+    return document
 
 
 class ZeepAsyncClient(BaseZeepAsyncClient):
@@ -201,9 +236,7 @@ class ONVIFService:
         wsse = UsernameDigestTokenDtDiff(
             self.user, self.passwd, dt_diff=self.dt_diff, use_digest=self.encrypt
         )
-        self.document = await self.loop.run_in_executor(
-            None, _cached_document, self.url
-        )
+        self.document = await _cached_document(self.url)
         self.zeep_client_authless = ZeepAsyncClient(
             wsdl=self.document,
             transport=self.transport,
