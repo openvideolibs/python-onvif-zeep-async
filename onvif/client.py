@@ -102,7 +102,9 @@ async def _cached_document(url: str) -> Document:
     loop = asyncio.get_event_loop()
 
     def _load_document() -> DocumentWithDeferredLoad:
-        document = DocumentWithDeferredLoad(url, ASYNC_TRANSPORT, DEFAULT_SETTINGS)
+        document = DocumentWithDeferredLoad(
+            url, ASYNC_TRANSPORT, settings=DEFAULT_SETTINGS
+        )
         # Override the default datetime type to use FastDateTime
         # This is a workaround for the following issue:
         # https://github.com/mvantellingen/python-zeep/pull/1370
