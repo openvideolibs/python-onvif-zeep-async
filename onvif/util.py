@@ -101,4 +101,6 @@ def create_no_verify_ssl_context() -> ssl.SSLContext:
         # This only works for OpenSSL >= 1.0.0
         sslcontext.options |= ssl.OP_NO_COMPRESSION
     sslcontext.set_default_verify_paths()
+    # ssl.OP_LEGACY_SERVER_CONNECT is only available in Python 3.12a4+
+    sslcontext.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
     return sslcontext
