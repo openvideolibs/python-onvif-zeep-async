@@ -7,7 +7,7 @@ from functools import lru_cache, partial
 import os
 import ssl
 from typing import Any
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse, ParseResultBytes
 
 from zeep.exceptions import Fault
 
@@ -18,13 +18,18 @@ utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
 path_isfile = lru_cache(maxsize=128)(os.path.isfile)
 
 
-def normalize_url(url: str) -> str:
+def normalize_url(url: bytes | str | None) -> str | None:
     """Normalize URL.
 
     Some cameras respond with <wsa5:Address>http://192.168.1.106:8106:8106/onvif/Subscription?Idx=43</wsa5:Address>
     https://github.com/home-assistant/core/issues/92603#issuecomment-1537213126
     """
+    if url is None:
+        return None
     parsed = urlparse(url)
+    # If the URL is not a string, return None
+    if isinstance(parsed, ParseResultBytes):
+        return None
     if "[" not in parsed.netloc and parsed.netloc.count(":") > 1:
         net_location = parsed.netloc.split(":", 3)
         net_location.pop()

@@ -573,7 +573,9 @@ class ONVIFCamera:
         # Get other XAddr
         xaddr = self.xaddrs.get(namespace)
         if not xaddr:
-            raise ONVIFError("Device doesn`t support service: %s" % name)
+            raise ONVIFError(
+                f"Device doesn`t support service: {name} with namespace {namespace}"
+            )
 
         return xaddr, wsdlpath, binding_name
 
