@@ -29,6 +29,10 @@ SUBSCRIPTION_ERRORS = (Fault, asyncio.TimeoutError, TransportError)
 RENEW_ERRORS = (ONVIFError, httpx.RequestError, XMLParseError, *SUBSCRIPTION_ERRORS)
 SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 
+# If the camera returns a subscription with a termination time that is less than
+# this value, we will use this value instead to prevent subscribing over and over
+# again.
+MINIMUM_SUBSCRIPTION_SECONDS = 60.0
 
 if TYPE_CHECKING:
     from onvif.client import ONVIFCamera, ONVIFService
@@ -116,7 +120,10 @@ class BaseManager:
             delay = termination_time - current_time
         else:
             delay = self._interval
-        delay_seconds = delay.total_seconds() * _RENEWAL_PERCENTAGE
+        delay_seconds = (
+            max(delay.total_seconds(), MINIMUM_SUBSCRIPTION_SECONDS)
+            * _RENEWAL_PERCENTAGE
+        )
         logger.debug(
             "%s: Renew notification subscription in %s seconds",
             self._device.host,
@@ -141,7 +148,7 @@ class BaseManager:
             self._renew_or_restart_subscription()
         )
 
-    async def _restart_subscription(self) -> bool:
+    async def _restart_subscription(self) -> float:
         """Restart the notify subscription assuming the camera rebooted."""
         self._cancel_renewals()
         return await self._start()
