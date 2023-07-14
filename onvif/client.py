@@ -14,7 +14,6 @@ from zeep.client import AsyncClient as BaseZeepAsyncClient
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
-from .wsa import WsAddressingIfMissingPlugin
 from zeep.wsdl import Document
 from zeep.wsse.username import UsernameToken
 
@@ -28,6 +27,7 @@ from .transport import ASYNC_TRANSPORT
 from .types import FastDateTime
 from .util import create_no_verify_ssl_context, normalize_url, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
+from .wsa import WsAddressingIfMissingPlugin
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
