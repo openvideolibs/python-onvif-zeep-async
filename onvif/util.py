@@ -7,7 +7,7 @@ from functools import lru_cache, partial
 import os
 import ssl
 from typing import Any
-from urllib.parse import urlparse, urlunparse, ParseResultBytes
+from urllib.parse import ParseResultBytes, urlparse, urlunparse
 
 from zeep.exceptions import Fault
 

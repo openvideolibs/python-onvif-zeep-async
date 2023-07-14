@@ -14,7 +14,6 @@ from zeep.client import AsyncClient as BaseZeepAsyncClient
 import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.transports import AsyncTransport
-from zeep.wsa import WsAddressingPlugin
 from zeep.wsdl import Document
 from zeep.wsse.username import UsernameToken
 
@@ -28,6 +27,7 @@ from .transport import ASYNC_TRANSPORT
 from .types import FastDateTime
 from .util import create_no_verify_ssl_context, normalize_url, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
+from .wsa import WsAddressingIfMissingPlugin
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -242,7 +242,7 @@ class ONVIFService:
             wsdl=self.document,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=[WsAddressingIfMissingPlugin()],
         )
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
@@ -252,7 +252,7 @@ class ONVIFService:
             wsse=wsse,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingPlugin()],
+            plugins=[WsAddressingIfMissingPlugin()],
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
         namespace = binding_name[binding_name.find("{") + 1 : binding_name.find("}")]
