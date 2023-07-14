@@ -33,7 +33,7 @@ logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 
-
+_SENTINEL = object()
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
 _DEFAULT_TIMEOUT = 90
 _PULLPOINT_TIMEOUT = 90
@@ -501,13 +501,19 @@ class ONVIFCamera:
 
     async def get_snapshot_uri(self, profile_token: str) -> str:
         """Get the snapshot uri for a given profile."""
-        uri = self._snapshot_uris.get(profile_token)
+        uri = self._snapshot_uris.get(profile_token, _SENTINEL)
         if uri is None:
             media_service = await self.create_media_service()
             req = media_service.create_type("GetSnapshotUri")
             req.ProfileToken = profile_token
             result = await media_service.GetSnapshotUri(req)
-            uri = normalize_url(result.Uri)
+            try:
+                uri = normalize_url(result.Uri)
+            except KeyError:
+                logger.warning(
+                    "%s: The device returned an invalid snapshot URI", self.host
+                )
+                uri = None
             self._snapshot_uris[profile_token] = uri
         return uri
 
