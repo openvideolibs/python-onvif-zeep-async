@@ -18,16 +18,15 @@ class WsAddressingIfMissingPlugin(Plugin):
 
     def egress(self, envelope, http_headers, operation, binding_options):
         """Apply the ws-addressing headers to the given envelope."""
-
-        wsa_action = operation.abstract.wsa_action
-        if not wsa_action:
-            wsa_action = operation.soapaction
-
         header = get_or_create_header(envelope)
         for elem in header:
             if (elem.prefix or "").startswith("wsa"):
                 # WSA header already exists
                 return envelope, http_headers
+
+        wsa_action = operation.abstract.wsa_action
+        if not wsa_action:
+            wsa_action = operation.soapaction
 
         headers = [
             WSA.Action(wsa_action),
