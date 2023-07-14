@@ -502,7 +502,7 @@ class ONVIFCamera:
     async def get_snapshot_uri(self, profile_token: str) -> str:
         """Get the snapshot uri for a given profile."""
         uri = self._snapshot_uris.get(profile_token, _SENTINEL)
-        if uri is None:
+        if uri is _SENTINEL:
             media_service = await self.create_media_service()
             req = media_service.create_type("GetSnapshotUri")
             req.ProfileToken = profile_token
