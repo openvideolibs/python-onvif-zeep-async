@@ -506,14 +506,23 @@ class ONVIFCamera:
             media_service = await self.create_media_service()
             req = media_service.create_type("GetSnapshotUri")
             req.ProfileToken = profile_token
-            result = await media_service.GetSnapshotUri(req)
+            uri = None
             try:
-                uri = normalize_url(result.Uri)
-            except KeyError:
+                result = await media_service.GetSnapshotUri(req)
+            except zeep.exceptions.Fault as error:
                 logger.warning(
-                    "%s: The device returned an invalid snapshot URI", self.host
+                    "%s: Failed to get snapshot URI for profile %s: %s",
+                    self.host,
+                    profile_token,
+                    error,
                 )
-                uri = None
+            else:
+                try:
+                    uri = normalize_url(result.Uri)
+                except KeyError:
+                    logger.warning(
+                        "%s: The device returned an invalid snapshot URI", self.host
+                    )
             self._snapshot_uris[profile_token] = uri
         return uri
 
