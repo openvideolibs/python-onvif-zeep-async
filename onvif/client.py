@@ -34,7 +34,7 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 
 _SENTINEL = object()
-_WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
+_WSDL_PATH = os.path.join(os.path.dirname(__file__), "wsdl")
 _DEFAULT_TIMEOUT = 90
 _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
