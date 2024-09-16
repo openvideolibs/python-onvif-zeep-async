@@ -17,9 +17,9 @@ _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "onvif", "
 def test_normalize_url():
     assert normalize_url("http://1.2.3.4:80") == "http://1.2.3.4:80"
     assert normalize_url("http://1.2.3.4:80:80") == "http://1.2.3.4:80"
-    assert normalize_url("http://[:dead:beef::1]:80") == "http://[:dead:beef::1]:80"
+    assert normalize_url("http://[dead:beef::1]:80") == "http://[dead:beef::1]:80"
     assert normalize_url(None) is None
-    assert normalize_url(b"http://[:dead:beef::1]:80") is None
+    assert normalize_url(b"http://[dead:beef::1]:80") is None
 
 
 @pytest.mark.asyncio
