@@ -1,55 +1,107 @@
 """Example to fetch pullpoint events."""
+
+from aiohttp import web
+import argparse
 import asyncio
 import datetime as dt
 import logging
+import onvif
+import os.path
+import pprint
+import sys
 
-from pytz import UTC
-from zeep import xsd
-
-from onvif import ONVIFCamera
-
-logging.getLogger("zeep").setLevel(logging.DEBUG)
+SUBSCRIPTION_TIME = dt.timedelta(minutes=1)
+WAIT_TIME = dt.timedelta(seconds=30)
 
 
-async def run():
-    mycam = ONVIFCamera(
-        "192.168.3.10",
-        80,
-        "hass",
-        "peek4boo",
-        wsdl_dir="/home/jason/python-onvif-zeep-async/onvif/wsdl",
+def subscription_lost():
+    print("subscription lost")
+
+
+async def post_handler(request):
+    print(request)
+    print(request.url)
+    for k, v in request.headers.items():
+        print(f"{k}: {v}")
+    body = await request.content.read()
+    print(body)
+    return web.Response()
+
+
+async def run(args):
+    mycam = onvif.ONVIFCamera(
+        args.host,
+        args.port,
+        args.username,
+        args.password,
+        wsdl_dir=f"{os.path.dirname(onvif.__file__)}/wsdl/",
     )
     await mycam.update_xaddrs()
 
-    if not await mycam.create_pullpoint_subscription():
-        print("PullPoint not supported")
-        return
+    capabilities = await mycam.get_capabilities()
+    pprint.pprint(capabilities)
 
-    event_service = mycam.create_events_service()
-    properties = await event_service.GetEventProperties()
-    print(properties)
-    capabilities = await event_service.GetServiceCapabilities()
-    print(capabilities)
+    if args.notification:
+        app = web.Application()
+        app.add_routes([web.post("/", post_handler)])
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, args.notification_address, args.notification_port)
+        await site.start()
 
-    pullpoint = mycam.create_pullpoint_service()
-    await pullpoint.SetSynchronizationPoint()
-    req = pullpoint.create_type("PullMessages")
-    req.MessageLimit = 100
-    req.Timeout = dt.timedelta(seconds=30)
-    messages = await pullpoint.PullMessages(req)
-    print(messages)
+        receive_url = f"http://{args.notification_address}:{args.notification_port}/"
+        manager = await mycam.create_notification_manager(
+            receive_url,
+            SUBSCRIPTION_TIME,
+            subscription_lost,
+        )
+        await manager.set_synchronization_point()
 
-    subscription = mycam.create_subscription_service("PullPointSubscription")
-    termination_time = (
-        (dt.datetime.utcnow() + dt.timedelta(days=1))
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
-    await subscription.Renew(termination_time)
-    await subscription.Unsubscribe()
+        print(f"waiting for messages at {receive_url}...")
+        await asyncio.sleep(WAIT_TIME.total_seconds())
+
+        await manager.shutdown()
+        await runner.cleanup()
+    else:
+        manager = await mycam.create_pullpoint_manager(
+            SUBSCRIPTION_TIME, subscription_lost
+        )
+        await manager.set_synchronization_point()
+
+        pullpoint = manager.get_service()
+        print("waiting for messages...")
+        messages = await pullpoint.PullMessages(
+            {
+                "MessageLimit": 100,
+                "Timeout": WAIT_TIME,
+            }
+        )
+        print(messages)
+
+        await manager.shutdown()
+
     await mycam.close()
 
 
-if __name__ == "__main__":
+def main():
+    logging.getLogger("zeep").setLevel(logging.DEBUG)
+
+    parser = argparse.ArgumentParser(prog="EventTester")
+    parser.add_argument("--host", default="192.168.3.10")
+    parser.add_argument("--port", type=int, default=80)
+    parser.add_argument("--username", default="hass")
+    parser.add_argument("--password", default="peek4boo")
+    parser.add_argument("--notification", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--notification_address")
+    parser.add_argument("--notification_port", type=int, default=8976)
+
+    args = parser.parse_args(sys.argv[1:])
+    if args.notification and args.notification_address is None:
+        parser.error("--notification requires --notification_address")
+
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(run())
+    loop.run_until_complete(run(args))
+
+
+if __name__ == "__main__":
+    main()
