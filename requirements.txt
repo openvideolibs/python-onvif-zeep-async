@@ -1,6 +1,6 @@
 # Package
 httpx==0.19.0
-zeep[async]==4.1.0
+zeep[async]==4.3.1
 
 # Dev
 pytest
