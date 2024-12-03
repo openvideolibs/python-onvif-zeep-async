@@ -6,7 +6,8 @@ import asyncio
 import datetime as dt
 import logging
 import os.path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth

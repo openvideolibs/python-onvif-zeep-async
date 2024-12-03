@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable
 import logging
-from typing import Callable, ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar
+from collections.abc import Callable
 
 import httpx
 
