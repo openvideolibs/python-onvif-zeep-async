@@ -3,6 +3,10 @@
 exclude: "CHANGELOG.md|.copier-answers.yml|.all-contributorsrc"
 default_stages: [commit]
 
+ci:
+  autofix_commit_msg: "chore(pre-commit.ci): auto fixes"
+  autoupdate_commit_msg: "chore(pre-commit.ci): pre-commit autoupdate"
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
