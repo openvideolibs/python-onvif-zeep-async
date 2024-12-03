@@ -243,7 +243,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 						<xs:element name="MessageContentFilterDialect" type="xs:anyURI" minOccurs="1" maxOccurs="unbounded">
 							<xs:annotation>
 								<xs:documentation>
-						Defines the XPath function set supported for message content filtering.<br/> 
+						Defines the XPath function set supported for message content filtering.<br/>
 						The following MessageContentFilterDialects are mandatory for an ONVIF compliant device:
 							<ul type="disc">
 										<li>http://www.onvif.org/ver10/tev/messageContentFilter/ItemFilter.</li>
@@ -263,7 +263,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 							The Message Content Description Language allows referencing
 							of vendor-specific types. In order to ease the integration of such types into a client application,
 							the GetEventPropertiesResponse shall list all URI locations to schema files whose types are
-							used in the description of notifications, with MessageContentSchemaLocation elements.<br/> 
+							used in the description of notifications, with MessageContentSchemaLocation elements.<br/>
 							This list shall at least contain the URI of the ONVIF schema file.</xs:documentation>
 							</xs:annotation>
 						</xs:element>
@@ -324,7 +324,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 			<wsdl:output message="tev:GetServiceCapabilitiesResponse" wsaw:Action="http://www.onvif.org/ver10/events/wsdl/EventPortType/GetServiceCapabilitiesResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="CreatePullPointSubscription">
-			<wsdl:documentation>This method returns a PullPointSubscription that can be polled using PullMessages. 
+			<wsdl:documentation>This method returns a PullPointSubscription that can be polled using PullMessages.
 				This message contains the same elements as the SubscriptionRequest of the WS-BaseNotification without the ConsumerReference.<br/>
 				If no Filter is specified the pullpoint notifies all occurring events to the client.<br/>
 				This method is mandatory.</wsdl:documentation>
@@ -360,7 +360,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 				The device shall provide the following PullMessages command for all SubscriptionManager
 				endpoints returned by the CreatePullPointSubscription command. This method shall not wait until
 				the requested number of messages is available but return as soon as at least one message is available.<br/>
-				The command shall at least support a Timeout of one minute. In case a device supports retrieval of less messages 
+				The command shall at least support a Timeout of one minute. In case a device supports retrieval of less messages
 				than requested it shall return these without generating a fault.</wsdl:documentation>
 			<wsdl:input message="tev:PullMessagesRequest" wsaw:Action="http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest"/>
 			<wsdl:output message="tev:PullMessagesResponse" wsaw:Action="http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesResponse"/>

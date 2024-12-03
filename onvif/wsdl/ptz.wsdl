@@ -821,7 +821,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 				A PTZ-capable device may have multiple PTZ Nodes. The PTZ Nodes may represent
 				mechanical PTZ drivers, uploaded PTZ drivers or digital PTZ drivers. PTZ Nodes are the
 				lowest level entities in the PTZ control API and reflect the supported PTZ capabilities. The
-				PTZ Node is referenced either by its name or by its reference token. 
+				PTZ Node is referenced either by its name or by its reference token.
       		</wsdl:documentation>
 			<wsdl:input message="tptz:GetNodesRequest"/>
 			<wsdl:output message="tptz:GetNodesResponse"/>
@@ -890,7 +890,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 				Video Source Configuration. In that case, the options may additionally contain coordinate
 				systems referring to the image coordinate system described by the Video Source
 				Configuration. If the PTZ Node supports continuous movements, it shall return a Timeout Range within
-				which Timeouts are accepted by the PTZ Node.				
+				which Timeouts are accepted by the PTZ Node.
 			</wsdl:documentation>
 			<wsdl:input message="tptz:GetConfigurationOptionsRequest"/>
 			<wsdl:output message="tptz:GetConfigurationOptionsResponse"/>
@@ -967,9 +967,9 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 			<wsdl:output message="tptz:ContinuousMoveResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="RelativeMove">
-			<wsdl:documentation>Operation for Relative Pan/Tilt and Zoom Move. The operation is supported if the PTZNode supports at least one relative Pan/Tilt or Zoom space.<br/> 
-				The speed argument is optional. If an x/y speed value is given it is up to the device to either use 
-				the x value as absolute resoluting speed vector or to map x and y to the component speed. 
+			<wsdl:documentation>Operation for Relative Pan/Tilt and Zoom Move. The operation is supported if the PTZNode supports at least one relative Pan/Tilt or Zoom space.<br/>
+				The speed argument is optional. If an x/y speed value is given it is up to the device to either use
+				the x value as absolute resoluting speed vector or to map x and y to the component speed.
 				If the speed argument is omitted, the default speed set by the PTZConfiguration will be used.
 			</wsdl:documentation>
 			<wsdl:input message="tptz:RelativeMoveRequest"/>
@@ -984,8 +984,8 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 		</wsdl:operation>
 		<wsdl:operation name="AbsoluteMove">
 			<wsdl:documentation>Operation to move pan,tilt or zoom to a absolute destination. <br/>
-				The speed argument is optional. If an x/y speed value is given it is up to the device to either use 
-				the x value as absolute resoluting speed vector or to map x and y to the component speed. 
+				The speed argument is optional. If an x/y speed value is given it is up to the device to either use
+				the x value as absolute resoluting speed vector or to map x and y to the component speed.
 				If the speed argument is omitted, the default speed set by the PTZConfiguration will be used.
 			</wsdl:documentation>
 			<wsdl:input message="tptz:AbsoluteMoveRequest"/>

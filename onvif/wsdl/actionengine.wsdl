@@ -1117,8 +1117,8 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 	</wsdl:message>
 	<wsdl:portType name="ActionEnginePort">
 		<wsdl:operation name="GetSupportedActions">
-			<wsdl:documentation> The service provider returns the supported action types. 
-		            <br/>The response returns a list of Action Descriptions according to the Action Description Language. 
+			<wsdl:documentation> The service provider returns the supported action types.
+		            <br/>The response returns a list of Action Descriptions according to the Action Description Language.
 		            <br/>The response also contains a list of URLs that provide the location of the schema files. These schema files describe the types and elements used in the Action Descriptions. If action descriptions reference types or elements of the ONVIF schema file, the ONVIF schema file shall be explicitly listed.</wsdl:documentation>
 			<wsdl:input message="tae:GetSupportedActionsRequest"/>
 			<wsdl:output message="tae:GetSupportedActionsResponse"/>

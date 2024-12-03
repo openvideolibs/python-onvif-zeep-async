@@ -949,7 +949,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 					</xs:element>
 					<xs:element name="Events" type="tt:EventSubscription" minOccurs="0">
 						<xs:annotation>
-							<xs:documentation>Optional element to configure the streaming of events. A client might be interested in receiving all, 
+							<xs:documentation>Optional element to configure the streaming of events. A client might be interested in receiving all,
 								none or some of the events produced by the device:<ul>
 									<li>To get all events: Include the Events element but do not include a filter.</li>
 									<li>To get no events: Do not include the Events element.</li>
@@ -3980,7 +3980,7 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="AbsolutePanTiltPositionSpace" type="tt:Space2DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The Generic Pan/Tilt Position space is provided by every PTZ node that supports absolute Pan/Tilt, since it does not relate to a specific physical range. 
+            The Generic Pan/Tilt Position space is provided by every PTZ node that supports absolute Pan/Tilt, since it does not relate to a specific physical range.
 			Instead, the range should be defined as the full range of the PTZ unit normalized to the range -1 to 1 resulting in the following space description.
           </xs:documentation>
 				</xs:annotation>
@@ -3988,8 +3988,8 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="AbsoluteZoomPositionSpace" type="tt:Space1DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The Generic Zoom Position Space is provided by every PTZ node that supports absolute Zoom, since it does not relate to a specific physical range. 
-			Instead, the range should be defined as the full range of the Zoom normalized to the range 0 (wide) to 1 (tele). 
+            The Generic Zoom Position Space is provided by every PTZ node that supports absolute Zoom, since it does not relate to a specific physical range.
+			Instead, the range should be defined as the full range of the Zoom normalized to the range 0 (wide) to 1 (tele).
 			There is no assumption about how the generic zoom range is mapped to magnification, FOV or other physical zoom dimension.
           </xs:documentation>
 				</xs:annotation>
@@ -3997,8 +3997,8 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="RelativePanTiltTranslationSpace" type="tt:Space2DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The Generic Pan/Tilt translation space is provided by every PTZ node that supports relative Pan/Tilt, since it does not relate to a specific physical range. 
-			Instead, the range should be defined as the full positive and negative translation range of the PTZ unit normalized to the range -1 to 1, 
+            The Generic Pan/Tilt translation space is provided by every PTZ node that supports relative Pan/Tilt, since it does not relate to a specific physical range.
+			Instead, the range should be defined as the full positive and negative translation range of the PTZ unit normalized to the range -1 to 1,
 			where positive translation would mean clockwise rotation or movement in right/up direction resulting in the following space description.
           </xs:documentation>
 				</xs:annotation>
@@ -4006,9 +4006,9 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="RelativeZoomTranslationSpace" type="tt:Space1DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The Generic Zoom Translation Space is provided by every PTZ node that supports relative Zoom, since it does not relate to a specific physical range. 
-			Instead, the corresponding absolute range should be defined as the full positive and negative translation range of the Zoom normalized to the range -1 to1, 
-			where a positive translation maps to a movement in TELE direction. The translation is signed to indicate direction (negative is to wide, positive is to tele). 
+            The Generic Zoom Translation Space is provided by every PTZ node that supports relative Zoom, since it does not relate to a specific physical range.
+			Instead, the corresponding absolute range should be defined as the full positive and negative translation range of the Zoom normalized to the range -1 to1,
+			where a positive translation maps to a movement in TELE direction. The translation is signed to indicate direction (negative is to wide, positive is to tele).
 			There is no assumption about how the generic zoom range is mapped to magnification, FOV or other physical zoom dimension. This results in the following space description.
           </xs:documentation>
 				</xs:annotation>
@@ -4016,8 +4016,8 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="ContinuousPanTiltVelocitySpace" type="tt:Space2DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The generic Pan/Tilt velocity space shall be provided by every PTZ node, since it does not relate to a specific physical range. 
-			Instead, the range should be defined as a range of the PTZ unit’s speed normalized to the range -1 to 1, where a positive velocity would map to clockwise 
+            The generic Pan/Tilt velocity space shall be provided by every PTZ node, since it does not relate to a specific physical range.
+			Instead, the range should be defined as a range of the PTZ unit’s speed normalized to the range -1 to 1, where a positive velocity would map to clockwise
 			rotation or movement in the right/up direction. A signed speed can be independently specified for the pan and tilt component resulting in the following space description.
           </xs:documentation>
 				</xs:annotation>
@@ -4025,7 +4025,7 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="ContinuousZoomVelocitySpace" type="tt:Space1DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The generic zoom velocity space specifies a zoom factor velocity without knowing the underlying physical model. The range should be normalized from -1 to 1, 
+            The generic zoom velocity space specifies a zoom factor velocity without knowing the underlying physical model. The range should be normalized from -1 to 1,
 			where a positive velocity would map to TELE direction. A generic zoom velocity space description resembles the following.
           </xs:documentation>
 				</xs:annotation>
@@ -4033,8 +4033,8 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="PanTiltSpeedSpace" type="tt:Space1DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The speed space specifies the speed for a Pan/Tilt movement when moving to an absolute position or to a relative translation. 
-			In contrast to the velocity spaces, speed spaces do not contain any directional information. The speed of a combined Pan/Tilt 
+            The speed space specifies the speed for a Pan/Tilt movement when moving to an absolute position or to a relative translation.
+			In contrast to the velocity spaces, speed spaces do not contain any directional information. The speed of a combined Pan/Tilt
 			movement is represented by a single non-negative scalar value.
           </xs:documentation>
 				</xs:annotation>
@@ -4042,8 +4042,8 @@ decoding .A decoder shall decode every data it receives (according to its capabi
 			<xs:element name="ZoomSpeedSpace" type="tt:Space1DDescription" minOccurs="0" maxOccurs="unbounded">
 				<xs:annotation>
 					<xs:documentation>
-            The speed space specifies the speed for a Zoom movement when moving to an absolute position or to a relative translation. 
-			In contrast to the velocity spaces, speed spaces do not contain any directional information. 
+            The speed space specifies the speed for a Zoom movement when moving to an absolute position or to a relative translation.
+			In contrast to the velocity spaces, speed spaces do not contain any directional information.
           </xs:documentation>
 				</xs:annotation>
 			</xs:element>
@@ -8133,7 +8133,7 @@ and sample rate. </xs:documentation>
 		<xs:annotation>
 		<xs:documentation>
 		  AudioClassType acceptable values are;
-		   gun_shot, scream, glass_breaking, tire_screech   
+		   gun_shot, scream, glass_breaking, tire_screech
 		</xs:documentation>
 		</xs:annotation>
 	<xs:restriction base="xs:string"/>
@@ -8145,12 +8145,12 @@ and sample rate. </xs:documentation>
 			<xs:annotation>
 			<xs:documentation>Indicates audio class label</xs:documentation>
 			</xs:annotation>
-		</xs:element> 
+		</xs:element>
  		<xs:element name="Likelihood" type="xs:float">
 			<xs:annotation>
 			<xs:documentation>A likelihood/probability that the corresponding audio event belongs to this class. The sum of the likelihoods shall NOT exceed 1</xs:documentation>
 			</xs:annotation>
-		</xs:element>  
+		</xs:element>
 		<xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
 	</xs:sequence>
 	<xs:anyAttribute processContents="lax"/>
@@ -8175,7 +8175,7 @@ and sample rate. </xs:documentation>
 	</xs:complexType>
 	<!--=========================================-->
 	<!--  End, Audio event types                 -->
-	<!--=========================================-->	
+	<!--=========================================-->
 	<!--==================================-->
 	<!--  Begin, OSD Device Types         -->
 	<!--==================================-->

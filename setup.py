@@ -1,4 +1,5 @@
 """Package Setup."""
+
 import os
 
 from setuptools import find_packages, setup
@@ -7,11 +8,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 version_path = os.path.join(here, "onvif/version.txt")
 version = open(version_path).read().strip()
 
-requires = [
-    "httpx>=0.19.0,<1.0.0",
-    "zeep[async]>=4.2.1,<5.0.0",
-    "ciso8601>=2.1.3"
-]
+requires = ["httpx>=0.19.0,<1.0.0", "zeep[async]>=4.2.1,<5.0.0", "ciso8601>=2.1.3"]
 
 CLASSIFIERS = [
     "Development Status :: 3 - Alpha",
