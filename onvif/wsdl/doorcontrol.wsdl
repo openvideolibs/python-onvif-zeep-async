@@ -923,9 +923,9 @@ If the request cannot be fulfilled, a Failure fault shall be returned.
   <wsdl:binding name="DoorControlBinding" type="tdc:DoorControlPort">
 <wsdl:documentation>
 Copyright (c) 2010-2013 by ONVIF: Open Network Video Interface Forum. All rights reserved.<br/>
- 
- 
- 
+
+
+
 
 </wsdl:documentation>
     <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>

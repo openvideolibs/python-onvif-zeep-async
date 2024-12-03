@@ -393,8 +393,8 @@ not be established.</wsdl:documentation>
 			<wsdl:output message="tls:GetPaneConfigurationResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="SetPaneConfigurations">
-			<wsdl:documentation>Modify one or more configurations of the specified video output. 
-			This method will only modify the provided configurations and leave the others unchanged. 
+			<wsdl:documentation>Modify one or more configurations of the specified video output.
+			This method will only modify the provided configurations and leave the others unchanged.
 			Use <a href="#op.DeletePaneConfiguration">DeletePaneConfiguration</a> to remove pane configurations.</wsdl:documentation>
 			<wsdl:input message="tls:SetPaneConfigurationsRequest"/>
 			<wsdl:output message="tls:SetPaneConfigurationsResponse"/>
@@ -415,7 +415,7 @@ not be established.</wsdl:documentation>
 		<wsdl:operation name="DeletePaneConfiguration">
 			<wsdl:documentation>Delete a pane configuration. A service must respond with an error if the pane configuration
 				is in use by the current layout.<br/>
-				This optional method is only supported by devices that signal support of dynamic pane creation via their capabilities. 
+				This optional method is only supported by devices that signal support of dynamic pane creation via their capabilities.
 			</wsdl:documentation>
 			<wsdl:input message="tls:DeletePaneConfigurationRequest"/>
 			<wsdl:output message="tls:DeletePaneConfigurationResponse"/>

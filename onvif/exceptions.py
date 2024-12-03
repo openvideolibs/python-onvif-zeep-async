@@ -1,4 +1,4 @@
-""" Core exceptions raised by the ONVIF Client """
+"""Core exceptions raised by the ONVIF Client"""
 
 # Error codes setting
 # Error unknown, e.g, HTTP errors

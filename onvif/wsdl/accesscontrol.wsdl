@@ -627,27 +627,27 @@ AccessPoint instance shall implement this method.
   <wsdl:binding name="PACSBinding" type="tac:PACSPort">
 <wsdl:documentation>
 Copyright (c) 2010-2013 by ONVIF: Open Network Video Interface Forum. All rights reserved.<br/>
-This is the initial minimized version of the Access Control service 
+This is the initial minimized version of the Access Control service
 aimed at the first PACS Profile C. <br/>
- 
- 
- 
- 
- 
- 
- 
-The AccessControl service implements the Authentication and 
-Authorization functionality and controls the actions to get 
+
+
+
+
+
+
+
+The AccessControl service implements the Authentication and
+Authorization functionality and controls the actions to get
 access to various Access Points controlling access to Doors and Areas. <br/>
- 
- 
-The basic data structures used by the service are: 
- 
-* CredentialInfo holding basic information of a credential.<br/> 
-* AccessPointInfo holding basic information on how access is controlled in 
-one direction for a door (from which area to which area) defined in the DoorControl service.<br/> 
- 
- 
+
+
+The basic data structures used by the service are:
+
+* CredentialInfo holding basic information of a credential.<br/>
+* AccessPointInfo holding basic information on how access is controlled in
+one direction for a door (from which area to which area) defined in the DoorControl service.<br/>
+
+
 
 </wsdl:documentation>
     <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>

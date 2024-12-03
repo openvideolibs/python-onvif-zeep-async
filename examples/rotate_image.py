@@ -4,7 +4,7 @@ from onvif import ONVIFCamera
 
 
 async def rotate_image_180():
-    """ Rotate the image """
+    """Rotate the image"""
 
     # Create the media service
     mycam = ONVIFCamera("192.168.0.112", 80, "admin", "12345")
@@ -14,7 +14,7 @@ async def rotate_image_180():
     profiles = await media_service.GetProfiles()
 
     # Use the first profile and Profiles have at least one
-    token = profiles[0].token
+    token = profiles[0].token  # noqa: F841
 
     # Get all video source configurations
     configurations_list = await media_service.GetVideoSourceConfigurations()

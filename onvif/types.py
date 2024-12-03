@@ -1,6 +1,5 @@
 """ONVIF types."""
 
-
 import ciso8601
 from zeep.xsd.types.builtins import DateTime, treat_whitespace
 
