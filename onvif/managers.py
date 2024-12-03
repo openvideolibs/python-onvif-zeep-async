@@ -6,7 +6,8 @@ from abc import abstractmethod
 import asyncio
 import datetime as dt
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 import httpx
 from httpx import TransportError
