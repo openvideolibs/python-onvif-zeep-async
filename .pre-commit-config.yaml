@@ -6,7 +6,6 @@ default_stages: [pre-commit]
 ci:
   autofix_commit_msg: "chore(pre-commit.ci): auto fixes"
   autoupdate_commit_msg: "chore(pre-commit.ci): pre-commit autoupdate"
-  skip: [mypy]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -37,3 +36,8 @@ repos:
     hooks:
       - id: pyupgrade
         args: [--py36-plus]
+#  - repo: https://github.com/pre-commit/mirrors-mypy
+#    rev: v1.11.2
+#    hooks:
+#      - id: mypy
+#        additional_dependencies: []
