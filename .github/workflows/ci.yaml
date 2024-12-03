@@ -29,6 +29,6 @@ jobs:
       - name: Tests
         run: python -m pytest --cov=onvif --cov-report=term-missing --cov-report=xml tests
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5.0.2
+        uses: codecov/codecov-action@v5.0.7
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # required
