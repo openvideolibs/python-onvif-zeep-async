@@ -16,7 +16,7 @@
    $Id: ws-addr.xsd,v 1.4 2008/07/14 18:48:47 plehegar Exp $
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://www.w3.org/2005/08/addressing" targetNamespace="http://www.w3.org/2005/08/addressing" blockDefault="#all" elementFormDefault="qualified" finalDefault="" attributeFormDefault="unqualified">
-	
+
 	<!-- Constructs from the WS-Addressing Core -->
 
 	<xs:element name="EndpointReference" type="tns:EndpointReferenceType"/>
@@ -29,14 +29,14 @@
 		</xs:sequence>
 		<xs:anyAttribute namespace="##other" processContents="lax"/>
 	</xs:complexType>
-	
+
 	<xs:complexType name="ReferenceParametersType" mixed="false">
 		<xs:sequence>
 			<xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
 		</xs:sequence>
 		<xs:anyAttribute namespace="##other" processContents="lax"/>
 	</xs:complexType>
-	
+
 	<xs:element name="Metadata" type="tns:MetadataType"/>
 	<xs:complexType name="MetadataType" mixed="false">
 		<xs:sequence>
@@ -44,7 +44,7 @@
 		</xs:sequence>
 		<xs:anyAttribute namespace="##other" processContents="lax"/>
 	</xs:complexType>
-	
+
 	<xs:element name="MessageID" type="tns:AttributedURIType"/>
 	<xs:element name="RelatesTo" type="tns:RelatesToType"/>
 	<xs:complexType name="RelatesToType" mixed="false">
@@ -55,17 +55,17 @@
 			</xs:extension>
 		</xs:simpleContent>
 	</xs:complexType>
-	
+
 	<xs:simpleType name="RelationshipTypeOpenEnum">
 		<xs:union memberTypes="tns:RelationshipType xs:anyURI"/>
 	</xs:simpleType>
-	
+
 	<xs:simpleType name="RelationshipType">
 		<xs:restriction base="xs:anyURI">
 			<xs:enumeration value="http://www.w3.org/2005/08/addressing/reply"/>
 		</xs:restriction>
 	</xs:simpleType>
-	
+
 	<xs:element name="ReplyTo" type="tns:EndpointReferenceType"/>
 	<xs:element name="From" type="tns:EndpointReferenceType"/>
 	<xs:element name="FaultTo" type="tns:EndpointReferenceType"/>
@@ -79,15 +79,15 @@
 			</xs:extension>
 		</xs:simpleContent>
 	</xs:complexType>
-	
+
 	<!-- Constructs from the WS-Addressing SOAP binding -->
 
 	<xs:attribute name="IsReferenceParameter" type="xs:boolean"/>
-	
+
 	<xs:simpleType name="FaultCodesOpenEnumType">
 		<xs:union memberTypes="tns:FaultCodesType xs:QName"/>
 	</xs:simpleType>
-	
+
 	<xs:simpleType name="FaultCodesType">
 		<xs:restriction base="xs:QName">
 			<xs:enumeration value="tns:InvalidAddressingHeader"/>
@@ -103,7 +103,7 @@
 			<xs:enumeration value="tns:EndpointUnavailable"/>
 		</xs:restriction>
 	</xs:simpleType>
-	
+
 	<xs:element name="RetryAfter" type="tns:AttributedUnsignedLongType"/>
 	<xs:complexType name="AttributedUnsignedLongType" mixed="false">
 		<xs:simpleContent>
@@ -112,7 +112,7 @@
 			</xs:extension>
 		</xs:simpleContent>
 	</xs:complexType>
-	
+
 	<xs:element name="ProblemHeaderQName" type="tns:AttributedQNameType"/>
 	<xs:complexType name="AttributedQNameType" mixed="false">
 		<xs:simpleContent>
@@ -121,7 +121,7 @@
 			</xs:extension>
 		</xs:simpleContent>
 	</xs:complexType>
-	
+
 	<xs:element name="ProblemHeader" type="tns:AttributedAnyType"/>
 	<xs:complexType name="AttributedAnyType" mixed="false">
 		<xs:sequence>
@@ -129,9 +129,9 @@
 		</xs:sequence>
 		<xs:anyAttribute namespace="##other" processContents="lax"/>
 	</xs:complexType>
-	
+
 	<xs:element name="ProblemIRI" type="tns:AttributedURIType"/>
-	
+
 	<xs:element name="ProblemAction" type="tns:ProblemActionType"/>
 	<xs:complexType name="ProblemActionType" mixed="false">
 		<xs:sequence>
@@ -140,5 +140,5 @@
 		</xs:sequence>
 		<xs:anyAttribute namespace="##other" processContents="lax"/>
 	</xs:complexType>
-	
+
 </xs:schema>

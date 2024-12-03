@@ -1,4 +1,5 @@
 """ONVIF Client wrappers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +22,7 @@ def retry_connection_error(
     """Define a wrapper to retry on connection error."""
 
     def _decorator_retry_connection_error(
-        func: Callable[P, Awaitable[T]]
+        func: Callable[P, Awaitable[T]],
     ) -> Callable[P, Awaitable[T]]:
         """Define a wrapper to retry on connection error.
 

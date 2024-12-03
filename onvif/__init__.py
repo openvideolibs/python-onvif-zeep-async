@@ -1,4 +1,5 @@
 """Initialize onvif."""
+
 import zeep
 
 from onvif.client import SERVICES, ONVIFCamera, ONVIFService
