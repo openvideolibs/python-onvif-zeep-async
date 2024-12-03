@@ -127,6 +127,11 @@ async def _cached_document(url: str) -> Document:
 class ZeepAsyncClient(BaseZeepAsyncClient):
     """Overwrite create_service method to be async."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.set_ns_prefix("wsnt", "http://docs.oasis-open.org/wsn/b-2")
+        self.set_ns_prefix("wsa", "http://www.w3.org/2005/08/addressing")
+
     def create_service(self, binding_name, address):
         """Create a new ServiceProxy for the given binding name and address.
         :param binding_name: The QName of the binding
