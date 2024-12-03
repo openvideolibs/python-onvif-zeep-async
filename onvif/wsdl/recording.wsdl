@@ -632,7 +632,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 			<wsdl:output message="trc:GetServiceCapabilitiesResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="CreateRecording">
-			<wsdl:documentation>CreateRecording shall create a new recording. The new recording shall be created with a track 
+			<wsdl:documentation>CreateRecording shall create a new recording. The new recording shall be created with a track
                                 for each supported TrackType see Recording Control Spec. <br/>
 				This method is optional. It shall be available if the Recording/DynamicRecordings capability is TRUE. <br/>
 				When successfully completed, CreateRecording shall have created three tracks with the following configurations: <ul>

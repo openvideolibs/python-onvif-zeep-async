@@ -278,23 +278,23 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 			<wsdl:output message="timg:SetImagingSettingsResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="GetOptions">
-			<wsdl:documentation>This operation gets the valid ranges for the imaging parameters that have device specific ranges. 
-			This command is mandatory for all device implementing the imaging service. The command returns all supported parameters and their ranges 
+			<wsdl:documentation>This operation gets the valid ranges for the imaging parameters that have device specific ranges.
+			This command is mandatory for all device implementing the imaging service. The command returns all supported parameters and their ranges
 			such that these can be applied to the SetImagingSettings command.<br/>
-			For read-only parameters which cannot be modified via the SetImagingSettings command only a single option or identical Min and Max values 
+			For read-only parameters which cannot be modified via the SetImagingSettings command only a single option or identical Min and Max values
 			is provided.</wsdl:documentation>
 			<wsdl:input message="timg:GetOptionsRequest"/>
 			<wsdl:output message="timg:GetOptionsResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="Move">
-			<wsdl:documentation>The Move command moves the focus lens in an absolute, a relative or in a continuous manner from its current position. 
-			The speed argument is optional for absolute and relative control, but required for continuous. If no speed argument is used, the default speed is used. 
-			Focus adjustments through this operation will turn off the autofocus. A device with support for remote focus control should support absolute, 
+			<wsdl:documentation>The Move command moves the focus lens in an absolute, a relative or in a continuous manner from its current position.
+			The speed argument is optional for absolute and relative control, but required for continuous. If no speed argument is used, the default speed is used.
+			Focus adjustments through this operation will turn off the autofocus. A device with support for remote focus control should support absolute,
 			relative or continuous control through the Move operation. The supported MoveOpions are signalled via the GetMoveOptions command.
 			At least one focus control capability is required for this operation to be functional. <br/>
 			The move operation contains the following commands:<br/>
 				<b>Absolute</b> – Requires position parameter and optionally takes a speed argument. A unitless type is used by default for focus positioning and speed. Optionally, if supported, the position may be requested in m-1 units. <br/>
-				<b>Relative</b> – Requires distance parameter and optionally takes a speed argument. Negative distance means negative direction. 
+				<b>Relative</b> – Requires distance parameter and optionally takes a speed argument. Negative distance means negative direction.
 			<b>Continuous</b> – Requires a speed argument. Negative speed argument means negative direction.
 			</wsdl:documentation>
 			<wsdl:input message="timg:MoveRequest"/>
@@ -306,7 +306,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 			<wsdl:output message="timg:GetMoveOptionsResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="Stop">
-			<wsdl:documentation>The Stop command stops all ongoing focus movements of the lense. A device with support for remote focus control as signalled via 
+			<wsdl:documentation>The Stop command stops all ongoing focus movements of the lense. A device with support for remote focus control as signalled via
 			the GetMoveOptions supports this command. <br/>The operation will not affect ongoing autofocus operation.</wsdl:documentation>
 			<wsdl:input message="timg:StopRequest"/>
 			<wsdl:output message="timg:StopResponse"/>

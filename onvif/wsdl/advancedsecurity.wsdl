@@ -2,9 +2,9 @@
 <?xml-stylesheet type="text/xsl" href="../../../ver20/util/onvif-wsdl-viewer.xsl"?>
 <!--
 	Copyright (c) 2013 - 2014 by ONVIF: Open Network Video Interface Forum. All rights reserved.
-	
+
 	Recipients of this document may copy, distribute, publish, or display this document so long as this copyright notice, license and disclaimer are retained with all copies of the document. No license is granted to modify this document.
-	
+
 	THIS DOCUMENT IS PROVIDED "AS IS," AND THE CORPORATION AND ITS MEMBERS AND THEIR AFFILIATES, MAKE NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR TITLE; THAT THE CONTENTS OF THIS DOCUMENT ARE SUITABLE FOR ANY PURPOSE; OR THAT THE IMPLEMENTATION OF SUCH CONTENTS WILL NOT INFRINGE ANY PATENTS, COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS.
 	IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL, PUNITIVE OR CONSEQUENTIAL DAMAGES, ARISING OUT OF OR RELATING TO ANY USE OR DISTRIBUTION OF THIS DOCUMENT, WHETHER OR NOT (1) THE CORPORATION, MEMBERS OR THEIR AFFILIATES HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES, OR (2) SUCH DAMAGES WERE REASONABLY FORESEEABLE, AND ARISING OUT OF OR RELATING TO ANY USE OR DISTRIBUTION OF THIS DOCUMENT.  THE FOREGOING DISCLAIMER AND LIMITATION ON LIABILITY DO NOT APPLY TO, INVALIDATE, OR LIMIT REPRESENTATIONS AND WARRANTIES MADE BY THE MEMBERS AND THEIR RESPECTIVE AFFILIATES TO THE CORPORATION AND OTHER MEMBERS IN CERTAIN WRITTEN POLICIES OF THE CORPORATION.
 -->
@@ -1223,16 +1223,16 @@
 		</wsdl:operation>
 		<wsdl:operation name="CreatePKCS10CSR">
 			<wsdl:documentation>
-				This operation generates a DER-encoded PKCS#10 v1.7 certification request (sometimes also called certificate signing request or CSR) as specified in RFC 2986 
+				This operation generates a DER-encoded PKCS#10 v1.7 certification request (sometimes also called certificate signing request or CSR) as specified in RFC 2986
 				for a public key on the device.<br/>
 				The key pair that contains the public key for which a certification request shall be produced is specified by its key ID.
-				If no key is stored under the requested KeyID or the key specified by the requested KeyID is not an asymmetric key pair, an invalid key ID fault shall be produced and 
+				If no key is stored under the requested KeyID or the key specified by the requested KeyID is not an asymmetric key pair, an invalid key ID fault shall be produced and
 				no CSR shall be generated.<br/>
-				
-				A device that supports this command shall as minimum support the sha-1WithRSAEncryption signature algorithm as specified in RFC 3279. 
+
+				A device that supports this command shall as minimum support the sha-1WithRSAEncryption signature algorithm as specified in RFC 3279.
 				If the specified signature algorithm is not supported by the device, an UnsupportedSignatureAlgorithm fault shall be produced and no CSR shall be generated.<br/>
-				
-				If the public key identified by the requested Key ID is an invalid input to the specified signature algorithm, a KeySignatureAlgorithmMismatch fault shall be produced 
+
+				If the public key identified by the requested Key ID is an invalid input to the specified signature algorithm, a KeySignatureAlgorithmMismatch fault shall be produced
 				and no CSR shall be generated.
 				If the key pair does not have status ok, a device shall produce an InvalidKeyStatus fault and no CSR shall be generated.
 			</wsdl:documentation>
@@ -1248,12 +1248,12 @@
 				The key pair that contains the public key for which a self-signed certificate shall be produced is specified by its key pair ID.
 				The subject parameter describes the entity that the public key belongs to.
 				If the key pair does not have status ok, a device shall produce an InvalidKeyStatus fault and no certificate shall be generated.
-				
+
 				The signature algorithm parameter determines which signature algorithm shall be used for signing the certification request with the public key specified by the key ID parameter.
-				A device that supports this command shall as minimum support the sha-1WithRSAEncryption signature algorithm as specified in RFC 3279. 
+				A device that supports this command shall as minimum support the sha-1WithRSAEncryption signature algorithm as specified in RFC 3279.
 				The Extensions parameter specifies potential X509v3 extensions that shall be contained in the certificate.
 				A device that supports this command shall support the extensions that are defined in [RFC 5280], Sect. 4.2] as mandatory for CAs that issue self-signed certificates.<br/>
-				
+
 				Certificates are uniquely identified using certificate IDs. If the command was successful, the device generates a new ID for the generated certificate and returns this ID.<br/>
 				If the device does not have not enough storage capacity for storing the certificate to be created, the maximum number of certificates reached fault shall be produced and no certificate shall be generated.
 			</wsdl:documentation>
@@ -1265,18 +1265,18 @@
 				This operation uploads an X.509 certificate as specified by [RFC 5280] in DER encoding and the public key in the certificate to a device’s keystore.<br/>
 				A device that supports this command shall be able to handle X.509v3 certificates as specified in RFC 5280 and may additionally be able to handle other X.509 certificate formats as indicated by the X.509Versions capability.
 				A device that supports this command shall support sha1-WithRSAEncryption as certificate signature algorithm.<br/>
-				
+
 				Certificates are uniquely identified using certificate IDs, and key pairs are uniquely identified using key IDs.
 				The device shall generate a new certificate ID for the uploaded certificate.<br/>
 				Certain certificate usages, e.g. TLS server authentication, require the private key that corresponds to the public key in the certificate to be present in the keystore.
 				In such cases, the client may indicate that it expects the device to produce a fault if the matching private key for
 				the uploaded certificate is not present in the keystore by setting the PrivateKeyRequired argument in the upload request to true.<br/>
-				
+
 				The uploaded certificate has to be linked to a key pair in the keystore.
 				If no private key is required for the public key in the certificate and a key pair exists in the keystore with a public key equal to the public key in the certificate,
 				the uploaded certificate is linked to the key pair identified by the supplied key ID by adding a reference from the certificate to the key pair.
 				If no private key is required for the public key in the certificate and no key pair exists with the public key equal to the public key in the certificate,
-				a new key pair with status ok is created with the public key from the certificate, and this key pair is linked to the uploaded certificate by adding a reference from 
+				a new key pair with status ok is created with the public key from the certificate, and this key pair is linked to the uploaded certificate by adding a reference from
 				the certificate to the key pair.
 				If a private key is required for the public key in the certificate, and a key pair exists in the keystore with a private key that matches the public key in the certificate,
 				the uploaded certificate is linked to this keypair by adding a reference from the certificate to the key pair.
@@ -1286,7 +1286,7 @@
 				If the device cannot process the uploaded certificate, a BadCertificate fault is produced and neither the uploaded certificate nor the public key are stored in the device’s keystore.
 				The BadCertificate fault shall not be produced based on the mere fact that the device’s current time lies outside the interval defined by the notBefore and notAfter fields as specified by [RFC 5280], Sect. 4.1 .
 				This operation shall not mark the uploaded certificate as trusted.<br/>
-				
+
 				If the device does not have not enough storage capacity for storing the certificate to be uploaded, the maximum number of certificates reached fault shall be produced
 				and no certificate shall be uploaded.
 				If the device does not have not enough storage capacity for storing the key pair that eventually has to be created, the device shall generate a maximum number of keys reached fault.
@@ -1332,9 +1332,9 @@
 				A certification path contains a sequence of certificate IDs.
 				If there is a certificate ID in the sequence of supplied certificate IDs for which no certificate exists in the device’s keystore, the corresponding fault shall be produced
 				and no certification path shall be created.<br/>
-				
+
 				The signature of each certificate in the certification path except for the last one must be verifiable with the public key contained in the next certificate in the path.
-				If there is a certificate ID in the request other than the last ID for which the corresponding certificate cannot be verified with the public key in the certificate identified 
+				If there is a certificate ID in the request other than the last ID for which the corresponding certificate cannot be verified with the public key in the certificate identified
 				by the next certificate ID, an InvalidCertificateChain fault shall be produced and no certification path shall be created.
 			</wsdl:documentation>
 			<wsdl:input message="tas:CreateCertificationPathRequest"/>
@@ -1379,18 +1379,18 @@
 			<wsdl:documentation>
 				This operation assigns a key pair and certificate along with a certification path (certificate chain) to the TLS server on the device.
 				The TLS server shall use this information for key exchange during the TLS handshake, particularly for constructing server certificate messages as specified in RFC 4346 and RFC 2246.<br/>
-				
+
 				Certification paths are identified by their certification path IDs in the keystore. The first certificate in the certification path must be the TLS server certificate.
 				Since each certificate has exactly one associated key pair, a reference to the key pair that is associated with the server certificate is not supplied explicitly.
 				Devices shall obtain the private key or results of operations under the private key by suitable internal interaction with the keystore.<br/>
-				If a device chooses to perform a TLS key exchange based on the supplied certification path,  it shall use the key pair that is associated with the server certificate for 
+				If a device chooses to perform a TLS key exchange based on the supplied certification path,  it shall use the key pair that is associated with the server certificate for
 				key exchange and transmit the certification path to TLS clients as-is, i.e., the device shall not check conformance of the certification path to RFC 4346 norRFC 2246.
 				In order to use the server certificate during the TLS handshake, the corresponding private key is required.
-				Therefore, if the key pair that is associated with the server certificate, i.e., the first certificate in the certification path, does not have an associated private key, 
+				Therefore, if the key pair that is associated with the server certificate, i.e., the first certificate in the certification path, does not have an associated private key,
 				the NoPrivateKey fault is produced and the certification path is not associated to the TLS server.<br/>
 				A TLS server may present different certification paths to different clients during the TLS handshake instead of presenting the same certification path to all clients.
 				Therefore more than one certification path may be assigned to the TLS server.<br/>
-				If the maximum number of certification paths that may be assigned to the TLS server simultaneously is reached, the device shall generate a MaximumNumberOfCertificationPathsReached 
+				If the maximum number of certification paths that may be assigned to the TLS server simultaneously is reached, the device shall generate a MaximumNumberOfCertificationPathsReached
 				fault and the requested certification path shall not be assigned to the TLS server.
 			</wsdl:documentation>
 			<wsdl:input message="tas:AddServerCertificateAssignmentRequest"/>
@@ -1407,11 +1407,11 @@
 		<wsdl:operation name="ReplaceServerCertificateAssignment">
 			<wsdl:documentation>
 				This operation replaces an existing key pair and certificate assignment to the TLS server on the device by a new key pair and certificate assignment (including certification paths).<br/>
-				
+
 				After the replacement, the TLS server shall use the new certificate and certification path exactly in those cases in which it would have used the old certificate and certification path.
 				Therefore, especially in the case that several server certificates are assigned to the TLS server, clients that wish to replace an old certificate assignment by a new assignment
 				should use this operation instead of a combination of the Add TLS Server Certificate Assignment and the Remove TLS Server Certificate Assignment operations.<br/>
-				
+
 				Certification paths are identified using certification path IDs. If the supplied old certification path ID is not associated to the TLS server, or no certification path exists
 				under the new certification path ID, the corresponding InvalidArgVal faults are produced and the associations are unchanged.
 				The first certificate in the new certification path must be the TLS server certificate.<br/>

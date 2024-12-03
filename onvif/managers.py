@@ -1,4 +1,5 @@
 """ONVIF Managers."""
+
 from __future__ import annotations
 
 from abc import abstractmethod
@@ -227,9 +228,9 @@ class NotificationManager(BaseManager):
             }
         )
         # pylint: disable=protected-access
-        device.xaddrs[
-            "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
-        ] = normalize_url(result.SubscriptionReference.Address._value_1)
+        device.xaddrs["http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"] = (
+            normalize_url(result.SubscriptionReference.Address._value_1)
+        )
         # Create subscription manager
         # 5.2.3 BASIC NOTIFICATION INTERFACE - NOTIFY
         # Call SetSynchronizationPoint to generate a notification message

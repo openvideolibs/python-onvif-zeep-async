@@ -221,7 +221,7 @@ IN NO EVENT WILL THE CORPORATION OR ITS MEMBERS OR THEIR AFFILIATES BE LIABLE FO
 			<xs:element name="GetProfiles">
 				<xs:complexType>
 					<xs:sequence>
-				
+
       </xs:sequence>
 				</xs:complexType>
 			</xs:element>
@@ -1735,7 +1735,7 @@ AudioOutputConfiguration shall be removed.</xs:documentation>
 				<xs:list itemType="xs:string"/>
 			</xs:simpleType>
 			<!--===============================-->
-			<xs:complexType name="VideoSourceMode"> 
+			<xs:complexType name="VideoSourceMode">
 				<xs:sequence>
 					<xs:element name="MaxFramerate" type="xs:float">
 						<xs:annotation>
@@ -1769,7 +1769,7 @@ AudioOutputConfiguration shall be removed.</xs:documentation>
 						<xs:documentation>Indicate token for video source mode.</xs:documentation>
 					</xs:annotation>
 				</xs:attribute>
-				<xs:attribute name="Enabled" type="xs:boolean"> 
+				<xs:attribute name="Enabled" type="xs:boolean">
 					<xs:annotation>
 						<xs:documentation>Indication of whether this mode is active. If active this value is true. In case of non-indication, it means as false. The value of true shall be had by only one video source mode.</xs:documentation>
 					</xs:annotation>
@@ -1777,7 +1777,7 @@ AudioOutputConfiguration shall be removed.</xs:documentation>
 				<xs:anyAttribute processContents="lax"/>
 			</xs:complexType>
 			<!--===============================-->
-			<xs:complexType name="VideoSourceModeExtension"> 
+			<xs:complexType name="VideoSourceModeExtension">
 				<xs:sequence>
 					<xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
 				</xs:sequence>
@@ -2473,7 +2473,7 @@ VideoEncoderConfiguration from the media profile.</wsdl:documentation>
 			<wsdl:output message="trt:RemoveVideoSourceConfigurationResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="AddAudioEncoderConfiguration">
-			<wsdl:documentation>This operation adds an AudioEncoderConfiguration to an existing media profile. If a 
+			<wsdl:documentation>This operation adds an AudioEncoderConfiguration to an existing media profile. If a
 configuration exists in the media profile, it will be replaced. The change shall be persistent. A device shall
 support adding a compatible AudioEncoderConfiguration to a profile containing an AudioSourceConfiguration and shall
 support streaming audio data of such a profile.
@@ -2682,7 +2682,7 @@ will vary depending on the capabilities, configurations and settings in the devi
 			<wsdl:output message="trt:GetCompatibleMetadataConfigurationsResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="GetCompatibleAudioOutputConfigurations">
-			<wsdl:documentation>This command lists all audio output configurations of a device that are compatible with a certain media profile. Each returned configuration shall be a valid input for the 
+			<wsdl:documentation>This command lists all audio output configurations of a device that are compatible with a certain media profile. Each returned configuration shall be a valid input for the
 AddAudioOutputConfiguration command.</wsdl:documentation>
 			<wsdl:input message="trt:GetCompatibleAudioOutputConfigurationsRequest"/>
 			<wsdl:output message="trt:GetCompatibleAudioOutputConfigurationsResponse"/>
@@ -2763,12 +2763,12 @@ that media profile.</wsdl:documentation>
 			<wsdl:output message="trt:GetVideoSourceConfigurationOptionsResponse"/>
 		</wsdl:operation>
 		<wsdl:operation name="GetVideoEncoderConfigurationOptions">
-			<wsdl:documentation>This operation returns the available options (supported values and ranges for video encoder 
+			<wsdl:documentation>This operation returns the available options (supported values and ranges for video encoder
 				configuration parameters) when the video encoder parameters are reconfigured. <br/>
-				For JPEG, MPEG4 and H264 extension elements have been defined that provide additional information. A device must provide the 
+				For JPEG, MPEG4 and H264 extension elements have been defined that provide additional information. A device must provide the
 				XxxOption information for all encodings supported and should additionally provide the corresponding XxxOption2 information.<br/>
-				This response contains the available video encoder configuration options. If a video encoder configuration is specified, 
-				the options shall concern that particular configuration. If a media profile is specified, the options shall be 
+				This response contains the available video encoder configuration options. If a video encoder configuration is specified,
+				the options shall concern that particular configuration. If a media profile is specified, the options shall be
 				compatible with that media profile. If no tokens are specified, the options shall be considered generic for the device.
 			</wsdl:documentation>
 			<wsdl:input message="trt:GetVideoEncoderConfigurationOptionsRequest"/>
@@ -2825,7 +2825,7 @@ accordingly (ValidUntilConnect=false, ValidUntilReboot=false, timeout=PT0S). <br
 					<li>RTP over RTSP over TCP: StreamType = "RTP_unicast", TransportProtocol = "RTSP"</li>
 				</ol>
 				<br/>
-If a multicast stream is requested the VideoEncoderConfiguration, AudioEncoderConfiguration and MetadataConfiguration element inside the corresponding 
+If a multicast stream is requested the VideoEncoderConfiguration, AudioEncoderConfiguration and MetadataConfiguration element inside the corresponding
 media profile must be configured with valid multicast settings.<br/>
 For full compatibility with other ONVIF services a device should not generate Uris longer than
 128 octets.</wsdl:documentation>

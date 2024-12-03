@@ -1,10 +1,9 @@
 """Example to fetch pullpoint events."""
+
 import asyncio
 import datetime as dt
 import logging
 
-from pytz import UTC
-from zeep import xsd
 
 from onvif import ONVIFCamera
 
