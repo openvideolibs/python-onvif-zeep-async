@@ -2,10 +2,9 @@
 -r requirements.txt
 
 # Dev
-pytest
-pytest-cov
-pytest-asyncio
-pylint
+pytest==8.3.4
+pytest-cov==6.0.0
+pytest-asyncio==0.24.0
 
 # pre-commit
-pre-commit==2.7.1
+pre-commit==4.0.1
