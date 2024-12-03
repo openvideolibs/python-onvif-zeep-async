@@ -1,0 +1,11 @@
+# Package
+-r requirements.txt
+
+# Dev
+pytest
+pytest-cov
+pytest-asyncio
+pylint
+
+# pre-commit
+pre-commit==2.7.1
