@@ -7,7 +7,7 @@ aiohttp==3.11.11
 # Dev
 pytest==8.3.4
 pytest-cov==6.0.0
-pytest-asyncio==0.25.1
+pytest-asyncio==0.25.2
 
 # pre-commit
 pre-commit==4.0.1
