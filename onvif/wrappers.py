@@ -19,6 +19,7 @@ logger = logging.getLogger("onvif")
 
 def retry_connection_error(
     attempts: int = DEFAULT_ATTEMPTS,
+    exception: httpx.HTTPError = httpx.RequestError,
 ) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Define a wrapper to retry on connection error."""
 
@@ -37,7 +38,7 @@ def retry_connection_error(
             for attempt in range(attempts):
                 try:
                     return await func(*args, **kwargs)
-                except httpx.RequestError as ex:
+                except exception as ex:
                     #
                     # We should only need to retry on RemoteProtocolError but some cameras
                     # are flakey and sometimes do not respond to the Renew request so we

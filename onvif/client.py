@@ -96,6 +96,23 @@ class DocumentWithDeferredLoad(Document):
         return original_load(self, *args, **kwargs)
 
 
+class AsyncTransportProtocolErrorHandler(AsyncTransport):
+    """Retry on remote protocol error.
+
+    http://datatracker.ietf.org/doc/html/rfc2616#section-8.1.4 allows the server
+    # to close the connection at any time, we treat this as a normal and try again
+    # once since
+    """
+
+    @retry_connection_error(attempts=2, exception=httpx.RemoteProtocolError)
+    async def post(self, address, message, headers):
+        return await super().post(address, message, headers)
+
+    @retry_connection_error(attempts=2, exception=httpx.RemoteProtocolError)
+    async def get(self, address, params, headers):
+        return await super().get(address, params, headers)
+
+
 async def _cached_document(url: str) -> Document:
     """Load external XML document from disk."""
     if url in _DOCUMENT_CACHE:
@@ -225,7 +242,7 @@ class ONVIFService:
         self.transport = (
             AsyncTransport(client=client, wsdl_client=wsdl_client)
             if no_cache
-            else AsyncTransport(
+            else AsyncTransportProtocolErrorHandler(
                 client=client, wsdl_client=wsdl_client, cache=SqliteCache()
             )
         )
