@@ -106,16 +106,10 @@ class AsyncTransportProtocolErrorHandler(AsyncTransport):
 
     @retry_connection_error(attempts=2, exception=httpx.RemoteProtocolError)
     async def post(self, address, message, headers):
-        import pprint
-
-        pprint.pprint(["post", address, message, headers])
         return await super().post(address, message, headers)
 
     @retry_connection_error(attempts=2, exception=httpx.RemoteProtocolError)
     async def get(self, address, params, headers):
-        import pprint
-
-        pprint.pprint(["get", address, params, headers])
         return await super().get(address, params, headers)
 
 
