@@ -106,10 +106,16 @@ class AsyncTransportProtocolErrorHandler(AsyncTransport):
 
     @retry_connection_error(attempts=2, exception=httpx.RemoteProtocolError)
     async def post(self, address, message, headers):
+        import pprint
+
+        pprint.pprint(["post", address, message, headers])
         return await super().post(address, message, headers)
 
     @retry_connection_error(attempts=2, exception=httpx.RemoteProtocolError)
     async def get(self, address, params, headers):
+        import pprint
+
+        pprint.pprint(["get", address, params, headers])
         return await super().get(address, params, headers)
 
 
@@ -240,7 +246,7 @@ class ONVIFService:
             verify=_NO_VERIFY_SSL_CONTEXT, timeout=timeouts, limits=_HTTPX_LIMITS
         )
         self.transport = (
-            AsyncTransport(client=client, wsdl_client=wsdl_client)
+            AsyncTransportProtocolErrorHandler(client=client, wsdl_client=wsdl_client)
             if no_cache
             else AsyncTransportProtocolErrorHandler(
                 client=client, wsdl_client=wsdl_client, cache=SqliteCache()
