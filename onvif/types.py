@@ -21,6 +21,11 @@ def _try_parse_datetime(value: str) -> datetime | None:
 
 
 def _try_fix_time_overflow(time: str) -> tuple[str, dict[str, int]]:
+    """Some camera will overflow time so we need to fix it.
+
+    To do this we calculate the offset beyond the maximum value
+    and then add it to the current time as a timedelta.
+    """
     offset: dict[str, int] = {}
     hour = int(time[0:2])
     if hour > 23:
