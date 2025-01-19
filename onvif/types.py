@@ -81,7 +81,7 @@ class ForgivingTime(Time):
             pass
 
         # Some cameras overflow the hours/minutes/seconds
-        # For example, 2024-08-17T00:61:16Z so we need
+        # For example, 00:61:16Z so we need
         # to fix the overflow
         fixed_time, offset = _try_fix_time_overflow(value)
         if fixed_dt := _try_parse_datetime(f"2024-01-15T{fixed_time}Z"):
