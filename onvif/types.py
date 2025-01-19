@@ -53,7 +53,7 @@ class FastDateTime(DateTime):
         # lazy hack ;-)
         if len(value) == 10:
             value += "T00:00:00"
-        elif (len(value) == 19 or len(value) == 26) and value[10] == " ":
+        elif (len(value) in (19, 20, 26)) and value[10] == " ":
             value = "T".join(value.split(" "))
 
         if dt := _try_parse_datetime(value):
@@ -63,7 +63,11 @@ class FastDateTime(DateTime):
         # For example, 2024-08-17T00:61:16Z so we need
         # to fix the overflow
         date, _, time = value.partition("T")
-        fixed_time, offset = _try_fix_time_overflow(time)
+        try:
+            fixed_time, offset = _try_fix_time_overflow(time)
+        except ValueError:
+            return ciso8601.parse_datetime(value)
+
         if dt := _try_parse_datetime(f"{date}T{fixed_time}"):
             return dt + timedelta(**offset)
 
@@ -83,7 +87,10 @@ class ForgivingTime(Time):
         # Some cameras overflow the hours/minutes/seconds
         # For example, 00:61:16Z so we need
         # to fix the overflow
-        fixed_time, offset = _try_fix_time_overflow(value)
+        try:
+            fixed_time, offset = _try_fix_time_overflow(value)
+        except ValueError:
+            return isodate.parse_time(value)
         if fixed_dt := _try_parse_datetime(f"2024-01-15T{fixed_time}Z"):
             return (fixed_dt + timedelta(**offset)).time()
         return isodate.parse_time(value)

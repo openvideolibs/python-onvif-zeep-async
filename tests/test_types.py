@@ -15,7 +15,7 @@ _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "onvif", "
 
 
 @pytest.mark.asyncio
-async def test_parse_invalid_time(caplog: pytest.LogCaptureFixture) -> None:
+async def test_parse_invalid_dt(caplog: pytest.LogCaptureFixture) -> None:
     device = ONVIFCamera("127.0.0.1", 80, "user", "pass", wsdl_dir=_WSDL_PATH)
     device.xaddrs = {
         "http://www.onvif.org/ver10/events/wsdl": "http://192.168.210.102:6688/onvif/event_service"
@@ -38,6 +38,31 @@ async def test_parse_invalid_time(caplog: pytest.LogCaptureFixture) -> None:
         2024, 8, 17, 1, 1, 16, tzinfo=datetime.timezone.utc
     )
     assert "ValueError" not in caplog.text
+
+
+def test_parse_invalid_datetime() -> None:
+    with pytest.raises(ValueError, match="Invalid character while parsing year"):
+        FastDateTime().pythonvalue("aaaa-aa-aaTaa:aa:aaZ")
+
+
+def test_parse_invalid_time() -> None:
+    with pytest.raises(ValueError, match="Unrecognised ISO 8601 time format"):
+        ForgivingTime().pythonvalue("aa:aa:aa")
+
+
+def test_fix_datetime_missing_time() -> None:
+    assert FastDateTime().pythonvalue("2024-08-17") == datetime.datetime(
+        2024, 8, 17, 0, 0, 0
+    )
+
+
+def test_fix_datetime_missing_t() -> None:
+    assert FastDateTime().pythonvalue("2024-08-17 00:61:16Z") == datetime.datetime(
+        2024, 8, 17, 1, 1, 16, tzinfo=datetime.timezone.utc
+    )
+    assert FastDateTime().pythonvalue("2024-08-17 00:61:16") == datetime.datetime(
+        2024, 8, 17, 1, 1, 16
+    )
 
 
 def test_fix_datetime_overflow() -> None:
