@@ -1,3 +1,4 @@
-[tool.black]
-target-version = ["py36", "py37", "py38"]
-exclude = 'generated'
+[tool.pytest.ini_options]
+pythonpath = ["onvif"]
+log_cli="true"
+log_level="NOTSET"

@@ -26,7 +26,7 @@ from .const import KEEPALIVE_EXPIRY
 from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
-from .types import FastDateTime
+from .types import FastDateTime, ForgivingTime
 from .util import create_no_verify_ssl_context, normalize_url, path_isfile, utcnow
 from .wrappers import retry_connection_error  # noqa: F401
 from .wsa import WsAddressingIfMissingPlugin
@@ -129,8 +129,14 @@ async def _cached_document(url: str) -> Document:
         schema = document.types.documents.get_by_namespace(
             "http://www.w3.org/2001/XMLSchema", False
         )[0]
+        logger.debug("Overriding default datetime type to use FastDateTime")
         instance = FastDateTime(is_global=True)
         schema.register_type(FastDateTime._default_qname, instance)
+
+        logger.debug("Overriding default time type to use ForgivingTime")
+        instance = ForgivingTime(is_global=True)
+        schema.register_type(ForgivingTime._default_qname, instance)
+
         document.types.add_documents([None], url)
         # Perform the original load
         document.original_load(url)
