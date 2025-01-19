@@ -84,7 +84,6 @@ class ForgivingTime(Time):
         # For example, 2024-08-17T00:61:16Z so we need
         # to fix the overflow
         fixed_time, offset = _try_fix_time_overflow(value)
-        try:
-            return isodate.parse_time(fixed_time) + timedelta(**offset)
-        except ValueError:
-            return isodate.parse_time(value)
+        if fixed_dt := _try_parse_datetime(f"2024-01-15T{fixed_time}Z"):
+            return (fixed_dt + timedelta(**offset)).time()
+        return isodate.parse_time(value)
