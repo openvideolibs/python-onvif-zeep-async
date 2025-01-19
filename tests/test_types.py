@@ -83,6 +83,11 @@ def test_fix_datetime_overflow() -> None:
     )
 
 
+def test_unfixable_datetime_overflow() -> None:
+    with pytest.raises(ValueError, match="Invalid character while parsing minute"):
+        FastDateTime().pythonvalue("2024-08-17T999:00:00Z")
+
+
 def test_fix_time_overflow() -> None:
     assert ForgivingTime().pythonvalue("24:00:00") == datetime.time(0, 0, 0)
     assert ForgivingTime().pythonvalue("23:59:59") == datetime.time(23, 59, 59)
@@ -90,3 +95,8 @@ def test_fix_time_overflow() -> None:
     assert ForgivingTime().pythonvalue("23:59:61") == datetime.time(0, 0, 1)
     assert ForgivingTime().pythonvalue("23:60:00") == datetime.time(0, 0, 0)
     assert ForgivingTime().pythonvalue("23:61:00") == datetime.time(0, 1, 0)
+
+
+def test_unfixable_time_overflow() -> None:
+    with pytest.raises(ValueError, match="Unrecognised ISO 8601 time format"):
+        assert ForgivingTime().pythonvalue("999:00:00")
