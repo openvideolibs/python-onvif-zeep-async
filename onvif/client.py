@@ -576,9 +576,9 @@ class ONVIFCamera:
         try:
             response = await self._snapshot_client.get(uri, auth=auth)
         except httpx.TimeoutException as error:
-            raise ONVIFTimeoutError(error) from error
+            raise ONVIFTimeoutError(f"Timed out fetching {uri}: {error}") from error
         except httpx.RequestError as error:
-            raise ONVIFError(error) from error
+            raise ONVIFError(f"Error fetching {uri}: {error}") from error
 
         if response.status_code == 401:
             raise ONVIFAuthError(f"Failed to authenticate to {uri}")
