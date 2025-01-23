@@ -111,54 +111,6 @@ Or create an unofficial service::
     # Another way
     # await mycam.yourservice.SomeOperation()
 
-ONVIF CLI
----------
-python-onvif also provides a command line interactive interface: onvif-cli.
-onvif-cli is installed automatically.
-
-Single command example
-~~~~~~~~~~~~~~~~~~~~~~
-
-::
-
-    $ onvif-cli devicemgmt GetHostname --user 'admin' --password '12345' --host '192.168.0.112' --port 80
-    True: {'FromDHCP': True, 'Name': hision}
-    $ onvif-cli devicemgmt SetHostname "{'Name': 'NewerHostname'}" --user 'admin' --password '12345' --host '192.168.0.112' --port 80
-    True: {}
-
-Interactive mode
-~~~~~~~~~~~~~~~~
-
-::
-
-    $ onvif-cli -u 'admin' -a '12345' --host '192.168.0.112' --port 80 --wsdl /etc/onvif/wsdl/
-    ONVIF >>> cmd
-    analytics   devicemgmt  events      imaging     media       ptz
-    ONVIF >>> cmd devicemgmt GetWsdlUrl
-    True: http://www.onvif.org/
-    ONVIF >>> cmd devicemgmt SetHostname {'Name': 'NewHostname'}
-    ONVIF >>> cmd devicemgmt GetHostname
-    True: {'Name': 'NewHostName'}
-    ONVIF >>> cmd devicemgmt SomeOperation
-    False: No Operation: SomeOperation
-
-NOTE: Tab completion is supported for interactive mode.
-
-Batch mode
-~~~~~~~~~~
-
-::
-
-    $ vim batchcmds
-    $ cat batchcmds
-    cmd devicemgmt GetWsdlUrl
-    cmd devicemgmt SetHostname {'Name': 'NewHostname', 'FromDHCP': True}
-    cmd devicemgmt GetHostname
-    $ onvif-cli --host 192.168.0.112 -u admin -a 12345 -w /etc/onvif/wsdl/ < batchcmds
-    ONVIF >>> True: http://www.onvif.org/
-    ONVIF >>> True: {}
-    ONVIF >>> True: {'FromDHCP': False, 'Name': NewHostname}
-
 References
 ----------
 
