@@ -10,4 +10,4 @@ pytest-cov==6.0.0
 pytest-asyncio==0.25.2
 
 # pre-commit
-pre-commit==4.0.1
+pre-commit==4.1.0
