@@ -52,5 +52,4 @@ setup(
         "onvif": ["*.wsdl", "*.xsd", "*xml*", "envelope", "include", "addressing"],
         "onvif.wsdl": ["*.wsdl", "*.xsd", "*xml*", "envelope", "include", "addressing"],
     },
-    entry_points={"console_scripts": ["onvif-cli = onvif.cli:main"]},
 )
