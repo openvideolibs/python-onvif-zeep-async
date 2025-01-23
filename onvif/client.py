@@ -8,8 +8,6 @@ import logging
 import os.path
 from typing import Any
 from collections.abc import Callable
-from yarl import URL
-from multidict import CIMultiDict
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
@@ -28,7 +26,14 @@ from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
 from .types import FastDateTime, ForgivingTime
-from .util import create_no_verify_ssl_context, normalize_url, path_isfile, utcnow
+from .util import (
+    create_no_verify_ssl_context,
+    normalize_url,
+    path_isfile,
+    utcnow,
+    strip_user_pass_url,
+    obscure_user_pass_url,
+)
 from .wrappers import retry_connection_error  # noqa: F401
 from .wsa import WsAddressingIfMissingPlugin
 
@@ -45,38 +50,6 @@ _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
 _HTTPX_LIMITS = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY)
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
-_CREDENTIAL_KEYS = ("username", "user", "pass", "password")
-
-
-def strip_user_pass_url(url: str) -> str:
-    """Strip password from URL."""
-    parsed_url = URL(url)
-    query = parsed_url.query
-    new_query: CIMultiDict | None = None
-    for key in _CREDENTIAL_KEYS:
-        if key in query:
-            if new_query is None:
-                new_query = CIMultiDict(parsed_url.query)
-            new_query.popall(key)
-    if new_query is not None:
-        return str(parsed_url.with_query(new_query))
-    return url
-
-
-def obscure_user_pass_url(url: str) -> str:
-    """Obscure user and password from URL."""
-    parsed_url = URL(url)
-    query = parsed_url.query
-    new_query: CIMultiDict | None = None
-    for key in _CREDENTIAL_KEYS:
-        if key in query:
-            if new_query is None:
-                new_query = CIMultiDict(parsed_url.query)
-            new_query.popall(key)
-            new_query[key] = "********"
-    if new_query is not None:
-        return str(parsed_url.with_query(new_query))
-    return url
 
 
 def safe_func(func):

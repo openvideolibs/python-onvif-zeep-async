@@ -4,6 +4,7 @@ import os
 
 import pytest
 from zeep.loader import parse_xml
+from onvif.util import strip_user_pass_url, obscure_user_pass_url
 
 from onvif.client import ONVIFCamera
 from onvif.settings import DEFAULT_SETTINGS
@@ -40,3 +41,16 @@ async def test_normalize_url_with_missing_url():
     )
     result = operation.process_reply(envelope)
     assert normalize_url(result.SubscriptionReference.Address._value_1) is None
+
+
+def test_strip_user_pass_url():
+    assert strip_user_pass_url("http://1.2.3.4/?user=foo&pass=bar") == "http://1.2.3.4/"
+    assert strip_user_pass_url("http://1.2.3.4/") == "http://1.2.3.4/"
+
+
+def test_obscure_user_pass_url():
+    assert (
+        obscure_user_pass_url("http://1.2.3.4/?user=foo&pass=bar")
+        == "http://1.2.3.4/?user=********&pass=********"
+    )
+    assert obscure_user_pass_url("http://1.2.3.4/") == "http://1.2.3.4/"
