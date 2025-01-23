@@ -8,7 +8,6 @@ import logging
 import os.path
 from typing import Any
 from collections.abc import Callable
-
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
@@ -27,7 +26,14 @@ from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
 from .types import FastDateTime, ForgivingTime
-from .util import create_no_verify_ssl_context, normalize_url, path_isfile, utcnow
+from .util import (
+    create_no_verify_ssl_context,
+    normalize_url,
+    path_isfile,
+    utcnow,
+    strip_user_pass_url,
+    obscure_user_pass_url,
+)
 from .wrappers import retry_connection_error  # noqa: F401
 from .wsa import WsAddressingIfMissingPlugin
 
@@ -573,12 +579,16 @@ class ONVIFCamera:
             else:
                 auth = DigestAuth(self.user, self.passwd)
 
-        try:
-            response = await self._snapshot_client.get(uri, auth=auth)
-        except httpx.TimeoutException as error:
-            raise ONVIFTimeoutError(f"Timed out fetching {uri}: {error}") from error
-        except httpx.RequestError as error:
-            raise ONVIFError(f"Error fetching {uri}: {error}") from error
+        response = await self._try_snapshot_uri(uri, auth)
+
+        # If the request fails with a 401, make sure to strip any
+        # sample user/pass from the URL and try again
+        if (
+            response.status_code == 401
+            and (stripped_uri := strip_user_pass_url(uri))
+            and stripped_uri != uri
+        ):
+            response = await self._try_snapshot_uri(stripped_uri, auth)
 
         if response.status_code == 401:
             raise ONVIFAuthError(f"Failed to authenticate to {uri}")
@@ -587,6 +597,20 @@ class ONVIFCamera:
             return response.content
 
         return None
+
+    async def _try_snapshot_uri(
+        self, uri: str, auth: BasicAuth | DigestAuth | None
+    ) -> httpx.Response:
+        try:
+            return await self._snapshot_client.get(uri, auth=auth)
+        except httpx.TimeoutException as error:
+            raise ONVIFTimeoutError(
+                f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
+            ) from error
+        except httpx.RequestError as error:
+            raise ONVIFError(
+                f"Error fetching {obscure_user_pass_url(uri)}: {error}"
+            ) from error
 
     def get_definition(
         self, name: str, port_type: str | None = None

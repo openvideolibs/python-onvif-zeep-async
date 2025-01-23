@@ -9,7 +9,8 @@ import os
 import ssl
 from typing import Any
 from urllib.parse import ParseResultBytes, urlparse, urlunparse
-
+from yarl import URL
+from multidict import CIMultiDict
 from zeep.exceptions import Fault
 
 utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
@@ -17,6 +18,8 @@ utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
 # This does blocking I/O (stat) so we cache the result
 # to minimize the impact of the blocking I/O.
 path_isfile = lru_cache(maxsize=128)(os.path.isfile)
+
+_CREDENTIAL_KEYS = ("username", "password", "user", "pass")
 
 
 def normalize_url(url: bytes | str | None) -> str | None:
@@ -105,3 +108,34 @@ def create_no_verify_ssl_context() -> ssl.SSLContext:
     # ssl.OP_LEGACY_SERVER_CONNECT is only available in Python 3.12a4+
     sslcontext.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
     return sslcontext
+
+
+def strip_user_pass_url(url: str) -> str:
+    """Strip password from URL."""
+    parsed_url = URL(url)
+    query = parsed_url.query
+    new_query: CIMultiDict | None = None
+    for key in _CREDENTIAL_KEYS:
+        if key in query:
+            if new_query is None:
+                new_query = CIMultiDict(parsed_url.query)
+            new_query.popall(key)
+    if new_query is not None:
+        return str(parsed_url.with_query(new_query))
+    return url
+
+
+def obscure_user_pass_url(url: str) -> str:
+    """Obscure user and password from URL."""
+    parsed_url = URL(url)
+    query = parsed_url.query
+    new_query: CIMultiDict | None = None
+    for key in _CREDENTIAL_KEYS:
+        if key in query:
+            if new_query is None:
+                new_query = CIMultiDict(parsed_url.query)
+            new_query.popall(key)
+            new_query[key] = "********"
+    if new_query is not None:
+        return str(parsed_url.with_query(new_query))
+    return url
