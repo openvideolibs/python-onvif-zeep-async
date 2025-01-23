@@ -58,8 +58,9 @@ def strip_user_pass_url(url: str) -> str:
             if new_query is None:
                 new_query = CIMultiDict(parsed_url.query)
             new_query.popall(key)
-            parsed_url = parsed_url.with_query(new_query)
-    return str(parsed_url)
+    if new_query:
+        return str(parsed_url.with_query(new_query))
+    return url
 
 
 def obscure_user_pass_url(url: str) -> str:
@@ -73,8 +74,9 @@ def obscure_user_pass_url(url: str) -> str:
                 new_query = CIMultiDict(parsed_url.query)
             new_query.popall(key)
             new_query[key] = "********"
-            parsed_url = parsed_url.with_query(new_query)
-    return str(parsed_url)
+    if new_query:
+        return str(parsed_url.with_query(new_query))
+    return url
 
 
 def safe_func(func):
