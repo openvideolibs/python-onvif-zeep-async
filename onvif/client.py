@@ -8,7 +8,8 @@ import logging
 import os.path
 from typing import Any
 from collections.abc import Callable
-
+from yarl import URL
+from multidict import CIMultiDict
 import httpx
 from httpx import AsyncClient, BasicAuth, DigestAuth
 from zeep.cache import SqliteCache
@@ -44,6 +45,36 @@ _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
 _HTTPX_LIMITS = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY)
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
+_CREDENTIAL_KEYS = ("username", "user", "pass", "password")
+
+
+def strip_user_pass_url(url: str) -> str:
+    """Strip password from URL."""
+    parsed_url = URL(url)
+    query = parsed_url.query
+    new_query: CIMultiDict | None = None
+    for key in _CREDENTIAL_KEYS:
+        if key in query:
+            if new_query is None:
+                new_query = CIMultiDict(parsed_url.query)
+            new_query.popall(key)
+            parsed_url = parsed_url.with_query(new_query)
+    return str(parsed_url)
+
+
+def obscure_user_pass_url(url: str) -> str:
+    """Obscure user and password from URL."""
+    parsed_url = URL(url)
+    query = parsed_url.query
+    new_query: CIMultiDict | None = None
+    for key in _CREDENTIAL_KEYS:
+        if key in query:
+            if new_query is None:
+                new_query = CIMultiDict(parsed_url.query)
+            new_query.popall(key)
+            new_query[key] = "********"
+            parsed_url = parsed_url.with_query(new_query)
+    return str(parsed_url)
 
 
 def safe_func(func):
@@ -573,12 +604,16 @@ class ONVIFCamera:
             else:
                 auth = DigestAuth(self.user, self.passwd)
 
-        try:
-            response = await self._snapshot_client.get(uri, auth=auth)
-        except httpx.TimeoutException as error:
-            raise ONVIFTimeoutError(f"Timed out fetching {uri}: {error}") from error
-        except httpx.RequestError as error:
-            raise ONVIFError(f"Error fetching {uri}: {error}") from error
+        response = await self._try_snapshot_uri(uri, auth)
+
+        # If the request fails with a 401, make sure to strip any
+        # sample user/pass from the URL and try again
+        if (
+            response.status_code == 401
+            and (stripped_uri := strip_user_pass_url(uri))
+            and stripped_uri != uri
+        ):
+            response = await self._try_snapshot_uri(stripped_uri, auth)
 
         if response.status_code == 401:
             raise ONVIFAuthError(f"Failed to authenticate to {uri}")
@@ -587,6 +622,20 @@ class ONVIFCamera:
             return response.content
 
         return None
+
+    async def _try_snapshot_uri(
+        self, uri: str, auth: BasicAuth | DigestAuth | None
+    ) -> httpx.Response:
+        try:
+            return await self._snapshot_client.get(uri, auth=auth)
+        except httpx.TimeoutException as error:
+            raise ONVIFTimeoutError(
+                f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
+            ) from error
+        except httpx.RequestError as error:
+            raise ONVIFError(
+                f"Error fetching {obscure_user_pass_url(uri)}: {error}"
+            ) from error
 
     def get_definition(
         self, name: str, port_type: str | None = None
