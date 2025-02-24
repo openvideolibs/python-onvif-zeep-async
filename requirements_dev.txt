@@ -2,7 +2,7 @@
 -r requirements.txt
 
 # Examples
-aiohttp==3.11.12
+aiohttp==3.11.13
 
 # Dev
 pytest==8.3.4
