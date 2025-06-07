@@ -2,6 +2,7 @@
 pythonpath = ["onvif"]
 log_cli="true"
 log_level="NOTSET"
+plugins = ["covdefaults"]
 
 
 [build-system]
