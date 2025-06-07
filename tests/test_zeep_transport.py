@@ -15,9 +15,12 @@ def create_mock_session(timeout=None):
     mock_session = Mock(spec=aiohttp.ClientSession)
     if timeout:
         mock_session.timeout = timeout
+        mock_session._timeout = timeout  # Some code accesses private attribute
     else:
         # Create a default timeout object
-        mock_session.timeout = Mock(total=300, sock_read=None)
+        default_timeout = Mock(total=300, sock_read=None)
+        mock_session.timeout = default_timeout
+        mock_session._timeout = default_timeout  # Some code accesses private attribute
     return mock_session
 
 
@@ -503,8 +506,8 @@ async def test_inherited_transport_attributes():
 
 
 @pytest.mark.asyncio
-async def test_no_session_auto_creates():
-    """Test transport auto-manages session if not provided."""
+async def test_session_reuse():
+    """Test transport reuses provided session."""
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session)
 
@@ -517,20 +520,17 @@ async def test_no_session_auto_creates():
     mock_aiohttp_response.raise_for_status = Mock()
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
-    # Without explicit session, should auto-create and cleanup
-    with patch("onvif.zeep_aiohttp.ClientSession") as mock_session_class:
-        mock_session = Mock(spec=aiohttp.ClientSession)
-        mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
-        mock_session.close = AsyncMock()
-        mock_session_class.return_value = mock_session
+    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
 
-        # Should work without explicit context manager
-        result = await transport.get("http://example.com")
-        assert result.content == b"test"
+    # Make multiple requests
+    result1 = await transport.get("http://example.com")
+    result2 = await transport.get("http://example.com")
 
-        # Session should have been created and closed
-        mock_session_class.assert_called()
-        mock_session.close.assert_called()
+    assert result1.content == b"test"
+    assert result2.content == b"test"
+
+    # Session should be reused
+    assert mock_session.get.call_count == 2
 
 
 def test_sync_load_creates_new_loop():
