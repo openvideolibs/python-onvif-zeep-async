@@ -62,7 +62,7 @@ class BaseManager:
     @property
     def closed(self) -> bool:
         """Return True if the manager is closed."""
-        return not self._subscription or self._subscription.transport.client.is_closed
+        return not self._subscription or self._subscription.transport.session.closed
 
     async def start(self) -> None:
         """Setup the manager."""

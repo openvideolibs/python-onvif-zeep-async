@@ -11,7 +11,6 @@ from zeep.transports import Transport
 from zeep.utils import get_version
 from zeep.wsdl.utils import etree_to_string
 
-import aiohttp
 import httpx
 from aiohttp import ClientResponse, ClientSession
 from requests import Response
@@ -160,15 +159,14 @@ class AIOHTTPTransport(Transport):
                 proxy=self.proxy,
                 timeout=self._client_timeout,
             )
-            response.raise_for_status()
 
-            # Read the content to log it
+            # Read the content to log it before checking status
             content = await response.read()
             _LOGGER.debug(
                 "HTTP Response from %s (status: %d):\n%s",
                 address,
                 response.status,
-                content.decode("utf-8", errors="replace"),
+                content,
             )
 
             # Convert to httpx Response
@@ -176,8 +174,6 @@ class AIOHTTPTransport(Transport):
 
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
-        except aiohttp.ClientError as exc:
-            raise ConnectionError(f"Error connecting to {address}: {exc}") from exc
 
     async def post_xml(
         self, address: str, envelope: _Element, headers: dict[str, str]
@@ -239,15 +235,15 @@ class AIOHTTPTransport(Transport):
                 proxy=self.proxy,
                 timeout=self._client_timeout,
             )
-            response.raise_for_status()
 
-            # Read content
+            # Read content and log before checking status
             content = await response.read()
 
             _LOGGER.debug(
-                "HTTP Response from %s (status: %d)",
+                "HTTP Response from %s (status: %d):\n%s",
                 address,
                 response.status,
+                content,
             )
 
             # Convert directly to requests.Response
@@ -255,8 +251,6 @@ class AIOHTTPTransport(Transport):
 
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
-        except aiohttp.ClientError as exc:
-            raise ConnectionError(f"Error connecting to {address}: {exc}") from exc
 
     def _httpx_to_requests_response(self, response: httpx.Response) -> Response:
         """Convert an httpx.Response object to a requests.Response object"""
