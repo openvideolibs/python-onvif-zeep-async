@@ -10,189 +10,578 @@ from onvif.zeep_aiohttp import AIOHTTPTransport
 from requests import Response as RequestsResponse
 
 
-class TestAIOHTTPTransport:
-    """Test AIOHTTPTransport matches AsyncTransport behavior."""
+@pytest.mark.asyncio
+async def test_post_returns_httpx_response():
+    """Test that post() returns an httpx.Response object."""
+    transport = AIOHTTPTransport()
 
-    @pytest.mark.asyncio
-    async def test_post_returns_httpx_response(self):
-        """Test that post() returns an httpx.Response object."""
-        transport = AIOHTTPTransport()
+    # Mock aiohttp session and response
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com/service"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
 
-        # Mock aiohttp session and response
-        mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
-        mock_aiohttp_response.status = 200
-        mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
-        mock_aiohttp_response.method = "POST"
-        mock_aiohttp_response.url = "http://example.com/service"
-        mock_aiohttp_response.charset = "utf-8"
-        mock_aiohttp_response.cookies = {}
-        mock_aiohttp_response.raise_for_status = Mock()
+    mock_content = b"<response>test</response>"
+    mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
 
-        mock_content = b"<response>test</response>"
-        mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
 
-        mock_session = Mock(spec=aiohttp.ClientSession)
-        mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
 
-        transport.session = mock_session
+    # Call post
+    result = await transport.post(
+        "http://example.com/service",
+        "<request>test</request>",
+        {"SOAPAction": "test"},
+    )
 
-        # Call post
-        result = await transport.post(
-            "http://example.com/service",
-            "<request>test</request>",
-            {"SOAPAction": "test"},
+    # Verify result is httpx.Response
+    assert isinstance(result, httpx.Response)
+    assert result.status_code == 200
+    assert result.read() == mock_content
+
+
+@pytest.mark.asyncio
+async def test_post_xml_returns_requests_response():
+    """Test that post_xml() returns a requests.Response object."""
+    transport = AIOHTTPTransport()
+
+    # Mock aiohttp session and response
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com/service"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+
+    mock_content = b"<response>test</response>"
+    mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+
+    transport.session = mock_session
+
+    # Create XML envelope
+    envelope = etree.Element("Envelope")
+    body = etree.SubElement(envelope, "Body")
+    etree.SubElement(body, "Request").text = "test"
+
+    # Call post_xml
+    result = await transport.post_xml(
+        "http://example.com/service", envelope, {"SOAPAction": "test"}
+    )
+
+    # Verify result is requests.Response
+    assert isinstance(result, RequestsResponse)
+    assert result.status_code == 200
+    assert result.content == mock_content
+
+
+@pytest.mark.asyncio
+async def test_get_returns_requests_response():
+    """Test that get() returns a requests.Response object."""
+    transport = AIOHTTPTransport()
+
+    # Mock aiohttp session and response
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+
+    mock_content = b"<response>test</response>"
+    mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+
+    transport.session = mock_session
+
+    # Call get
+    result = await transport.get(
+        "http://example.com/wsdl",
+        params={"version": "1.0"},
+        headers={"Accept": "text/xml"},
+    )
+
+    # Verify result is requests.Response
+    assert isinstance(result, RequestsResponse)
+    assert result.status_code == 200
+    assert result.content == mock_content
+
+
+@pytest.mark.asyncio
+async def test_context_manager():
+    """Test async context manager creates and closes session."""
+    transport = AIOHTTPTransport()
+
+    # Initial session should be None (not the parent's requests session)
+    assert transport.session is None or not isinstance(
+        transport.session, aiohttp.ClientSession
+    )
+
+    async with transport:
+        assert transport.session is not None
+        assert isinstance(transport.session, aiohttp.ClientSession)
+
+    # Session should be closed after context
+    assert transport.session is None
+
+
+@pytest.mark.asyncio
+async def test_aclose():
+    """Test aclose() method closes the session."""
+    transport = AIOHTTPTransport()
+
+    # Create a mock session
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.close = AsyncMock()
+    transport.session = mock_session
+
+    # Call aclose
+    await transport.aclose()
+
+    # Verify session.close() was called
+    mock_session.close.assert_called_once()
+
+
+def test_load_sync():
+    """Test load() method works synchronously."""
+    transport = AIOHTTPTransport()
+
+    # Mock the async get method
+    mock_response = Mock(spec=RequestsResponse)
+    mock_response.content = b"<wsdl>test</wsdl>"
+
+    with patch.object(transport, "get", new=AsyncMock(return_value=mock_response)):
+        result = transport.load("http://example.com/wsdl")
+
+    assert result == b"<wsdl>test</wsdl>"
+
+
+@pytest.mark.asyncio
+async def test_timeout_handling():
+    """Test timeout errors are properly handled."""
+    transport = AIOHTTPTransport(operation_timeout=0.1)
+
+    # Mock session that times out
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(side_effect=TimeoutError())
+
+    transport.session = mock_session
+
+    with pytest.raises(TimeoutError, match="Request to .* timed out"):
+        await transport.post(
+            "http://example.com/service", "<request>test</request>", {}
         )
 
-        # Verify result is httpx.Response
-        assert isinstance(result, httpx.Response)
-        assert result.status_code == 200
-        assert result.read() == mock_content
 
-    @pytest.mark.asyncio
-    async def test_post_xml_returns_requests_response(self):
-        """Test that post_xml() returns a requests.Response object."""
-        transport = AIOHTTPTransport()
+@pytest.mark.asyncio
+async def test_connection_error_handling():
+    """Test connection errors are properly handled."""
+    transport = AIOHTTPTransport()
 
-        # Mock aiohttp session and response
-        mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
-        mock_aiohttp_response.status = 200
-        mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
-        mock_aiohttp_response.method = "POST"
-        mock_aiohttp_response.url = "http://example.com/service"
-        mock_aiohttp_response.charset = "utf-8"
-        mock_aiohttp_response.cookies = {}
-        mock_aiohttp_response.raise_for_status = Mock()
+    # Mock session that fails
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(side_effect=aiohttp.ClientError("Connection failed"))
 
-        mock_content = b"<response>test</response>"
-        mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
+    transport.session = mock_session
 
-        mock_session = Mock(spec=aiohttp.ClientSession)
-        mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    with pytest.raises(ConnectionError, match="Error connecting to"):
+        await transport.get("http://example.com/wsdl")
 
-        transport.session = mock_session
 
-        # Create XML envelope
-        envelope = etree.Element("Envelope")
-        body = etree.SubElement(envelope, "Body")
-        etree.SubElement(body, "Request").text = "test"
+@pytest.mark.asyncio
+async def test_constructor_parameters():
+    """Test constructor accepts same parameters as AsyncTransport."""
+    # Test with minimal parameters
+    transport1 = AIOHTTPTransport()
+    assert transport1.timeout == 300
+    assert transport1.operation_timeout is None
+    assert transport1.verify_ssl is True
+    assert transport1.proxy is None
 
-        # Call post_xml
-        result = await transport.post_xml(
-            "http://example.com/service", envelope, {"SOAPAction": "test"}
-        )
+    # Test with all parameters
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    transport2 = AIOHTTPTransport(
+        session=mock_session,
+        timeout=100,
+        operation_timeout=50,
+        verify_ssl=False,
+        proxy="http://proxy:8080",
+    )
+    assert transport2.session == mock_session
+    assert transport2.timeout == 100
+    assert transport2.operation_timeout == 50
+    assert transport2.verify_ssl is False
+    assert transport2.proxy == "http://proxy:8080"
 
-        # Verify result is requests.Response
-        assert isinstance(result, RequestsResponse)
-        assert result.status_code == 200
-        assert result.content == mock_content
 
-    @pytest.mark.asyncio
-    async def test_get_returns_requests_response(self):
-        """Test that get() returns a requests.Response object."""
-        transport = AIOHTTPTransport()
+@pytest.mark.asyncio
+async def test_post_with_bytes_message():
+    """Test post() handles bytes message correctly."""
+    transport = AIOHTTPTransport()
 
-        # Mock aiohttp session and response
-        mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
-        mock_aiohttp_response.status = 200
-        mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
-        mock_aiohttp_response.charset = "utf-8"
-        mock_aiohttp_response.cookies = {}
-        mock_aiohttp_response.raise_for_status = Mock()
+    # Mock response
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"<response/>")
 
-        mock_content = b"<response>test</response>"
-        mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
 
+    # Test with bytes message
+    result = await transport.post(
+        "http://example.com", b"<request/>", {"SOAPAction": "test"}
+    )
+    assert isinstance(result, httpx.Response)
+    assert result.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_with_none_params():
+    """Test get() works with None params and headers."""
+    transport = AIOHTTPTransport()
+
+    # Mock response
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {"Content-Type": "text/xml"}
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"<wsdl/>")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
+
+    # Test without params/headers (should work with None)
+    result = await transport.get("http://example.com/wsdl", None, None)
+    assert isinstance(result, RequestsResponse)
+    assert result.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_user_agent_header():
+    """Test that User-Agent header is set correctly like AsyncTransport."""
+    transport = AIOHTTPTransport()
+
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {}
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    post_mock = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post = post_mock
+    transport.session = mock_session
+
+    await transport.post("http://example.com", "test", {})
+
+    # Check User-Agent was set
+    call_args = post_mock.call_args
+    headers = call_args[1]["headers"]
+    assert "User-Agent" in headers
+    assert headers["User-Agent"].startswith("Zeep/")
+
+
+@pytest.mark.asyncio
+async def test_operation_timeout_used():
+    """Test operation_timeout is used when set."""
+    transport = AIOHTTPTransport(timeout=300, operation_timeout=10)
+
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {}
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    post_mock = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post = post_mock
+    transport.session = mock_session
+
+    await transport.post("http://example.com", "test", {})
+
+    # Check that operation_timeout was used
+    call_args = post_mock.call_args
+    timeout = call_args[1]["timeout"]
+    assert timeout is not None
+    assert timeout.total == 10  # operation_timeout, not timeout
+
+
+@pytest.mark.asyncio
+async def test_proxy_parameter():
+    """Test proxy parameter is passed correctly."""
+    transport = AIOHTTPTransport(proxy="http://proxy:8080")
+
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {}
+    mock_aiohttp_response.method = "GET"
+    mock_aiohttp_response.url = "http://example.com"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    get_mock = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.get = get_mock
+    transport.session = mock_session
+
+    await transport.get("http://example.com")
+
+    # Check proxy was passed
+    call_args = get_mock.call_args
+    assert call_args[1]["proxy"] == "http://proxy:8080"
+
+
+@pytest.mark.asyncio
+async def test_verify_ssl_false():
+    """Test verify_ssl=False disables SSL verification."""
+    transport = AIOHTTPTransport(verify_ssl=False)
+
+    async with transport:
+        # Check that SSL verification is disabled
+        connector = transport.session.connector
+        assert isinstance(connector, aiohttp.TCPConnector)
+        assert connector._ssl is False
+
+
+@pytest.mark.asyncio
+async def test_verify_ssl_true():
+    """Test verify_ssl=True enables SSL verification."""
+    transport = AIOHTTPTransport(verify_ssl=True)
+
+    async with transport:
+        # Check that SSL verification is enabled
+        connector = transport.session.connector
+        assert isinstance(connector, aiohttp.TCPConnector)
+        assert connector._ssl is True
+
+
+@pytest.mark.asyncio
+async def test_response_encoding():
+    """Test response encoding is properly handled."""
+    transport = AIOHTTPTransport()
+
+    # Mock response with specific encoding
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {"Content-Type": "text/xml; charset=iso-8859-1"}
+    mock_aiohttp_response.charset = "iso-8859-1"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
+
+    result = await transport.get("http://example.com")
+
+    # Check encoding was preserved
+    assert result.encoding == "iso-8859-1"
+
+
+@pytest.mark.asyncio
+async def test_cookies_in_httpx_response():
+    """Test cookies are properly transferred to httpx response."""
+    transport = AIOHTTPTransport()
+
+    # Mock cookies
+    mock_cookie = Mock()
+    mock_cookie.key = "session"
+    mock_cookie.value = "abc123"
+    mock_cookie.get.side_effect = lambda k: {"domain": ".example.com", "path": "/"}.get(
+        k
+    )
+
+    mock_cookies = Mock()
+    mock_cookies.values.return_value = [mock_cookie]
+
+    # Mock response with cookies
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {}
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = mock_cookies
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
+
+    # Test httpx response (from post)
+    httpx_result = await transport.post("http://example.com", "test", {})
+    assert "session" in httpx_result.cookies
+
+
+@pytest.mark.asyncio
+async def test_cookies_in_requests_response():
+    """Test cookies are properly transferred to requests response."""
+    transport = AIOHTTPTransport()
+
+    # Mock cookies
+    mock_cookies = {"session": "abc123"}
+
+    # Mock response with cookies
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {}
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = mock_cookies
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
+
+    # Test requests response (from get)
+    requests_result = await transport.get("http://example.com")
+    assert requests_result.cookies == mock_cookies
+
+
+@pytest.mark.asyncio
+async def test_inherited_transport_attributes():
+    """Test that Transport base class attributes are available."""
+    transport = AIOHTTPTransport()
+
+    # Should have logger attribute from Transport
+    assert hasattr(transport, "logger")
+
+    # Should have cache attribute (though we set it to None)
+    assert hasattr(transport, "cache")
+    assert transport.cache is None
+
+    # Should have timeout attributes
+    assert hasattr(transport, "timeout")
+    assert hasattr(transport, "operation_timeout")
+
+
+@pytest.mark.asyncio
+async def test_no_session_auto_creates():
+    """Test transport auto-manages session if not provided."""
+    transport = AIOHTTPTransport()
+
+    # Mock response
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {}
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    # Without explicit session, should auto-create and cleanup
+    with patch("onvif.zeep_aiohttp.ClientSession") as mock_session_class:
         mock_session = Mock(spec=aiohttp.ClientSession)
         mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
-
-        transport.session = mock_session
-
-        # Call get
-        result = await transport.get(
-            "http://example.com/wsdl",
-            params={"version": "1.0"},
-            headers={"Accept": "text/xml"},
-        )
-
-        # Verify result is requests.Response
-        assert isinstance(result, RequestsResponse)
-        assert result.status_code == 200
-        assert result.content == mock_content
-
-    @pytest.mark.asyncio
-    async def test_context_manager(self):
-        """Test async context manager creates and closes session."""
-        transport = AIOHTTPTransport()
-
-        # Initial session should be None (not the parent's requests session)
-        assert transport.session is None or not isinstance(
-            transport.session, aiohttp.ClientSession
-        )
-
-        async with transport:
-            assert transport.session is not None
-            assert isinstance(transport.session, aiohttp.ClientSession)
-
-        # Session should be closed after context
-        assert transport.session is None
-
-    @pytest.mark.asyncio
-    async def test_aclose(self):
-        """Test aclose() method closes the session."""
-        transport = AIOHTTPTransport()
-
-        # Create a mock session
-        mock_session = Mock(spec=aiohttp.ClientSession)
         mock_session.close = AsyncMock()
-        transport.session = mock_session
+        mock_session_class.return_value = mock_session
 
-        # Call aclose
-        await transport.aclose()
+        # Should work without explicit context manager
+        result = await transport.get("http://example.com")
+        assert result.content == b"test"
 
-        # Verify session.close() was called
-        mock_session.close.assert_called_once()
+        # Session should have been created and closed
+        mock_session_class.assert_called()
+        mock_session.close.assert_called()
 
-    def test_load_sync(self):
-        """Test load() method works synchronously."""
-        transport = AIOHTTPTransport()
 
-        # Mock the async get method
-        mock_response = Mock(spec=RequestsResponse)
-        mock_response.content = b"<wsdl>test</wsdl>"
+def test_sync_load_creates_new_loop():
+    """Test load() creates new event loop when called from async context."""
+    transport = AIOHTTPTransport()
 
-        with patch.object(transport, "get", new=AsyncMock(return_value=mock_response)):
+    # Mock response
+    mock_response = Mock(spec=RequestsResponse)
+    mock_response.content = b"<wsdl/>"
+
+    # This should work even if there's already an event loop
+    with patch.object(transport, "get", new=AsyncMock(return_value=mock_response)):
+        with patch("asyncio.new_event_loop") as mock_new_loop:
+            mock_loop = Mock()
+            mock_loop.run_until_complete.return_value = mock_response
+            mock_new_loop.return_value = mock_loop
+
             result = transport.load("http://example.com/wsdl")
 
-        assert result == b"<wsdl>test</wsdl>"
+            # Should have created new loop
+            mock_new_loop.assert_called_once()
+            mock_loop.close.assert_called_once()
+            assert result == b"<wsdl/>"
 
-    @pytest.mark.asyncio
-    async def test_timeout_handling(self):
-        """Test timeout errors are properly handled."""
-        transport = AIOHTTPTransport(operation_timeout=0.1)
 
-        # Mock session that times out
-        mock_session = Mock(spec=aiohttp.ClientSession)
-        mock_session.post = AsyncMock(side_effect=TimeoutError())
+@pytest.mark.asyncio
+async def test_content_type_header_default():
+    """Test default Content-Type header is set for POST."""
+    transport = AIOHTTPTransport()
 
-        transport.session = mock_session
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    mock_aiohttp_response.headers = {}
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.raise_for_status = Mock()
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
-        with pytest.raises(TimeoutError, match="Request to .* timed out"):
-            await transport.post(
-                "http://example.com/service", "<request>test</request>", {}
-            )
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    post_mock = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post = post_mock
+    transport.session = mock_session
 
-    @pytest.mark.asyncio
-    async def test_connection_error_handling(self):
-        """Test connection errors are properly handled."""
-        transport = AIOHTTPTransport()
+    await transport.post("http://example.com", "test", {})
 
-        # Mock session that fails
-        mock_session = Mock(spec=aiohttp.ClientSession)
-        mock_session.get = AsyncMock(
-            side_effect=aiohttp.ClientError("Connection failed")
-        )
+    # Check Content-Type was set
+    call_args = post_mock.call_args
+    headers = call_args[1]["headers"]
+    assert headers["Content-Type"] == 'text/xml; charset="utf-8"'
 
-        transport.session = mock_session
 
-        with pytest.raises(ConnectionError, match="Error connecting to"):
-            await transport.get("http://example.com/wsdl")
+@pytest.mark.asyncio
+async def test_provided_session_not_closed():
+    """Test that provided session is not closed by context manager."""
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.close = AsyncMock()
+
+    transport = AIOHTTPTransport(session=mock_session)
+
+    async with transport:
+        assert transport.session == mock_session
+
+    # Provided session should not be closed
+    mock_session.close.assert_not_called()
+    assert transport.session == mock_session
