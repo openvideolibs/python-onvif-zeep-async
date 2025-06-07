@@ -165,13 +165,6 @@ class AIOHTTPTransport(Transport):
         headers.setdefault("User-Agent", f"Zeep/{get_version()}")
         headers.setdefault("Content-Type", 'text/xml; charset="utf-8"')
 
-        # Determine timeout
-        timeout = self.operation_timeout or self.timeout
-        if timeout:
-            client_timeout = ClientTimeout(total=timeout)
-        else:
-            client_timeout = None
-
         # Handle both str and bytes
         if isinstance(message, str):
             data = message.encode("utf-8")
@@ -184,7 +177,7 @@ class AIOHTTPTransport(Transport):
                 data=data,
                 headers=headers,
                 proxy=self.proxy,
-                timeout=client_timeout,
+                timeout=self._client_timeout,
             )
             response.raise_for_status()
 
