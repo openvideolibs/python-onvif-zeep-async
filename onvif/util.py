@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
-from functools import lru_cache, partial
 import os
 import ssl
+from functools import lru_cache, partial
 from typing import Any
 from urllib.parse import ParseResultBytes, urlparse, urlunparse
-from yarl import URL
-from multidict import CIMultiDict
+
 from zeep.exceptions import Fault
 
-utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
+from multidict import CIMultiDict
+from yarl import URL
+
+utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.UTC)
 
 # This does blocking I/O (stat) so we cache the result
 # to minimize the impact of the blocking I/O.
@@ -23,7 +25,8 @@ _CREDENTIAL_KEYS = ("username", "password", "user", "pass")
 
 
 def normalize_url(url: bytes | str | None) -> str | None:
-    """Normalize URL.
+    """
+    Normalize URL.
 
     Some cameras respond with <wsa5:Address>http://192.168.1.106:8106:8106/onvif/Subscription?Idx=43</wsa5:Address>
     https://github.com/home-assistant/core/issues/92603#issuecomment-1537213126
@@ -73,7 +76,8 @@ def stringify_onvif_error(error: Exception) -> str:
 
 
 def is_auth_error(error: Exception) -> bool:
-    """Return True if error is an authentication error.
+    """
+    Return True if error is an authentication error.
 
     Most of the tested cameras do not return a proper error code when
     authentication fails, so we need to check the error message as well.
@@ -90,7 +94,8 @@ def is_auth_error(error: Exception) -> bool:
 
 
 def create_no_verify_ssl_context() -> ssl.SSLContext:
-    """Return an SSL context that does not verify the server certificate.
+    """
+    Return an SSL context that does not verify the server certificate.
     This is a copy of aiohttp's create_default_context() function, with the
     ssl verify turned off and old SSL versions enabled.
 
@@ -113,6 +118,12 @@ def create_no_verify_ssl_context() -> ssl.SSLContext:
 def strip_user_pass_url(url: str) -> str:
     """Strip password from URL."""
     parsed_url = URL(url)
+
+    # First strip userinfo (user:pass@) from URL
+    if parsed_url.user or parsed_url.password:
+        parsed_url = parsed_url.with_user(None)
+
+    # Then strip credentials from query parameters
     query = parsed_url.query
     new_query: CIMultiDict | None = None
     for key in _CREDENTIAL_KEYS:
@@ -122,12 +133,23 @@ def strip_user_pass_url(url: str) -> str:
             new_query.popall(key)
     if new_query is not None:
         return str(parsed_url.with_query(new_query))
-    return url
+    return str(parsed_url)
 
 
 def obscure_user_pass_url(url: str) -> str:
     """Obscure user and password from URL."""
     parsed_url = URL(url)
+
+    # First obscure userinfo if present
+    if parsed_url.user:
+        # Keep the user but obscure the password
+        if parsed_url.password:
+            parsed_url = parsed_url.with_password("********")
+        else:
+            # If only user is present, obscure it
+            parsed_url = parsed_url.with_user("********")
+
+    # Then obscure credentials in query parameters
     query = parsed_url.query
     new_query: CIMultiDict | None = None
     for key in _CREDENTIAL_KEYS:
@@ -138,4 +160,4 @@ def obscure_user_pass_url(url: str) -> str:
             new_query[key] = "********"
     if new_query is not None:
         return str(parsed_url.with_query(new_query))
-    return url
+    return str(parsed_url)
