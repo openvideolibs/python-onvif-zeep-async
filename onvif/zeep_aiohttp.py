@@ -169,8 +169,6 @@ class AIOHTTPTransport(Transport):
                 content,
             )
 
-            response.raise_for_status()
-
             # Convert to httpx Response
             return self._aiohttp_to_httpx_response(response, content)
 
@@ -247,8 +245,6 @@ class AIOHTTPTransport(Transport):
                 response.status,
                 content,
             )
-
-            response.raise_for_status()
 
             # Convert directly to requests.Response
             return self._aiohttp_to_requests_response(response, content)
