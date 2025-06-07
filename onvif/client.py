@@ -547,6 +547,7 @@ class ONVIFCamera:
     async def close(self) -> None:
         """Close all transports."""
         await self._snapshot_client.close()
+        await self._snapshot_connector.close()
         for service in self.services.values():
             await service.close()
 
