@@ -54,7 +54,7 @@ class AIOHTTPTransport(Transport):
         self.proxy = proxy
         self._close_session = False  # Never close a provided session
         # Extract timeout from session
-        self._client_timeout = session._timeout
+        self._client_timeout = session.timeout
 
     async def __aenter__(self) -> AIOHTTPTransport:
         """Enter async context."""

@@ -15,12 +15,10 @@ def create_mock_session(timeout=None):
     mock_session = Mock(spec=aiohttp.ClientSession)
     if timeout:
         mock_session.timeout = timeout
-        mock_session._timeout = timeout  # Some code accesses private attribute
     else:
         # Create a default timeout object
         default_timeout = Mock(total=300, sock_read=None)
         mock_session.timeout = default_timeout
-        mock_session._timeout = default_timeout  # Some code accesses private attribute
     return mock_session
 
 
