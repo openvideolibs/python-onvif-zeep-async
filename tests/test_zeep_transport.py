@@ -36,7 +36,6 @@ async def test_post_returns_httpx_response():
     mock_aiohttp_response.url = "http://example.com/service"
     mock_aiohttp_response.charset = "utf-8"
     mock_aiohttp_response.cookies = {}
-    mock_aiohttp_response.raise_for_status = Mock()
 
     mock_content = b"<response>test</response>"
     mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
