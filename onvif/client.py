@@ -248,8 +248,6 @@ class ONVIFService:
         self.dt_diff = dt_diff
         self.binding_name = binding_name
         # Create soap client
-        timeout_seconds = _DEFAULT_TIMEOUT
-        operation_timeout = read_timeout or _READ_TIMEOUT
         connector = TCPConnector(
             ssl=_NO_VERIFY_SSL_CONTEXT,
             keepalive_timeout=KEEPALIVE_EXPIRY,
@@ -257,15 +255,15 @@ class ONVIFService:
         session = ClientSession(
             connector=connector,
             timeout=aiohttp.ClientTimeout(
-                total=timeout_seconds,
+                total=_DEFAULT_TIMEOUT,
                 connect=_CONNECT_TIMEOUT,
-                sock_read=operation_timeout,
+                sock_read=read_timeout or _READ_TIMEOUT,
             ),
         )
         self.transport = AsyncTransportProtocolErrorHandler(
             session=session,
-            timeout=timeout_seconds,
-            operation_timeout=operation_timeout,
+            timeout=_DEFAULT_TIMEOUT,
+            operation_timeout=read_timeout or _READ_TIMEOUT,
             verify_ssl=False,
         )
         if not no_cache:

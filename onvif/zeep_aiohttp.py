@@ -57,6 +57,12 @@ class AIOHTTPTransport(Transport):
         self.proxy = proxy
         self._close_session = session is None
 
+        # Pre-create timeout object to avoid recreating it on each request
+        effective_timeout = self.operation_timeout or self.timeout
+        self._client_timeout = (
+            ClientTimeout(total=effective_timeout) if effective_timeout else None
+        )
+
     async def __aenter__(self) -> AIOHTTPTransport:
         """Enter async context."""
         if self.session is None:
