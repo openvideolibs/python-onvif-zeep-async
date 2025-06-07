@@ -418,14 +418,13 @@ async def test_cookies_in_httpx_response():
 
     # Mock cookies
     mock_cookie = Mock()
-    mock_cookie.key = "session"
     mock_cookie.value = "abc123"
     mock_cookie.get.side_effect = lambda k: {"domain": ".example.com", "path": "/"}.get(
         k
     )
 
     mock_cookies = Mock()
-    mock_cookies.values.return_value = [mock_cookie]
+    mock_cookies.items.return_value = [("session", mock_cookie)]
 
     # Mock response with cookies
     mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)

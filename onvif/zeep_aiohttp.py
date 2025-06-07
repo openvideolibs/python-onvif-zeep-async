@@ -97,13 +97,13 @@ class AIOHTTPTransport(Transport):
 
         # Store cookies if any
         if aiohttp_response.cookies:
-            for cookie in aiohttp_response.cookies.values():
+            for name, cookie in aiohttp_response.cookies.items():
                 # httpx.Cookies.set only accepts name, value, domain, and path
                 httpx_response.cookies.set(
-                    cookie.key,
+                    name,
                     cookie.value,
-                    domain=cookie.get("domain", ""),
-                    path=cookie.get("path", "/"),
+                    domain=cookie.get("domain") or "",
+                    path=cookie.get("path") or "/",
                 )
 
         return httpx_response
