@@ -51,7 +51,7 @@ _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
-_KEEPALIVE_TIMEOUT = aiohttp.ClientTimeout(sock_keepalive=KEEPALIVE_EXPIRY)
+# Keepalive is set on the connector, not in ClientTimeout
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
 
