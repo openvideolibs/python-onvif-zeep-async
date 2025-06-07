@@ -116,7 +116,15 @@ class AIOHTTPTransport(Transport):
         new._content = content
         new.status_code = aiohttp_response.status
         new.headers = dict(aiohttp_response.headers)
-        new.cookies = aiohttp_response.cookies
+        # Convert aiohttp cookies to requests format
+        if aiohttp_response.cookies:
+            for name, cookie in aiohttp_response.cookies.items():
+                new.cookies.set(
+                    name,
+                    cookie.value,
+                    domain=cookie.get("domain"),
+                    path=cookie.get("path"),
+                )
         new.encoding = aiohttp_response.charset
         return new
 

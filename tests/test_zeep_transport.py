@@ -451,8 +451,11 @@ async def test_cookies_in_requests_response():
     """Test cookies are properly transferred to requests response."""
     transport = AIOHTTPTransport()
 
-    # Mock cookies
-    mock_cookies = {"session": "abc123"}
+    # Mock cookies using SimpleCookie format
+    from http.cookies import SimpleCookie
+
+    mock_cookies = SimpleCookie()
+    mock_cookies["session"] = "abc123"
 
     # Mock response with cookies
     mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
@@ -469,7 +472,8 @@ async def test_cookies_in_requests_response():
 
     # Test requests response (from get)
     requests_result = await transport.get("http://example.com")
-    assert requests_result.cookies == mock_cookies
+    assert "session" in requests_result.cookies
+    assert requests_result.cookies["session"] == "abc123"
 
 
 @pytest.mark.asyncio
