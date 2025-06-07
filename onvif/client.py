@@ -260,14 +260,18 @@ class ONVIFService:
                 sock_read=read_timeout or _READ_TIMEOUT,
             ),
         )
-        self.transport = AsyncTransportProtocolErrorHandler(
-            session=session,
-            timeout=_DEFAULT_TIMEOUT,
-            operation_timeout=read_timeout or _READ_TIMEOUT,
-            verify_ssl=False,
+        self.transport = (
+            AsyncTransportProtocolErrorHandler(
+                session=session,
+                verify_ssl=False,
+            )
+            if no_cache
+            else AIOHTTPTransport(
+                session=session,
+                verify_ssl=False,
+                cache=SqliteCache(),
+            )
         )
-        if not no_cache:
-            self.transport.cache = SqliteCache()
         self.document: Document | None = None
         self.zeep_client_authless: ZeepAsyncClient | None = None
         self.ws_client_authless: AsyncServiceProxy | None = None

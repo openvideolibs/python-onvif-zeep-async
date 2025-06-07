@@ -6,13 +6,14 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from zeep.cache import SqliteCache
 from zeep.transports import Transport
 from zeep.utils import get_version
 from zeep.wsdl.utils import etree_to_string
 
 import aiohttp
 import httpx
-from aiohttp import ClientResponse, ClientSession, ClientTimeout, TCPConnector
+from aiohttp import ClientResponse, ClientSession
 from requests import Response
 
 if TYPE_CHECKING:
@@ -26,61 +27,44 @@ class AIOHTTPTransport(Transport):
 
     def __init__(
         self,
-        session: ClientSession | None = None,
-        timeout: float = 300,
-        operation_timeout: float | None = None,
+        session: ClientSession,
         verify_ssl: bool = True,
         proxy: str | None = None,
+        cache: SqliteCache | None = None,
     ) -> None:
         """
         Initialize the transport.
 
         Args:
-            session: The aiohttp ClientSession to use
-            timeout: The default timeout for requests in seconds
-            operation_timeout: The default timeout for operations in seconds
+            session: The aiohttp ClientSession to use (required). The session's
+                     timeout configuration will be used for all requests.
             verify_ssl: Whether to verify SSL certificates
             proxy: Proxy URL to use
 
         """
         super().__init__(
-            cache=None,
-            timeout=timeout,
-            operation_timeout=operation_timeout,
+            cache=cache,
+            timeout=session.timeout.total,
+            operation_timeout=session.timeout.sock_read,
         )
 
         # Override parent's session with aiohttp session
         self.session = session
-        self.timeout = timeout
-        self.operation_timeout = operation_timeout
         self.verify_ssl = verify_ssl
         self.proxy = proxy
-        self._close_session = session is None
-
-        # Pre-create timeout object to avoid recreating it on each request
-        effective_timeout = self.operation_timeout or self.timeout
-        self._client_timeout = (
-            ClientTimeout(total=effective_timeout) if effective_timeout else None
-        )
+        self._close_session = False  # Never close a provided session
+        # Extract timeout from session
+        self._client_timeout = session._timeout
 
     async def __aenter__(self) -> AIOHTTPTransport:
         """Enter async context."""
-        if self.session is None:
-            connector = TCPConnector(ssl=self.verify_ssl)
-            timeout = ClientTimeout(total=self.timeout)
-            self.session = ClientSession(connector=connector, timeout=timeout)
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Exit async context."""
-        if self._close_session and self.session:
-            await self.session.close()
-            self.session = None
 
     async def aclose(self) -> None:
         """Close the transport session."""
-        if self.session:
-            await self.session.close()
 
     def _aiohttp_to_httpx_response(
         self, aiohttp_response: ClientResponse, content: bytes
@@ -149,9 +133,6 @@ class AIOHTTPTransport(Transport):
             The httpx response object
 
         """
-        if self.session is None:
-            async with self:
-                return await self._post(address, message, headers)
         return await self._post(address, message, headers)
 
     async def _post(
@@ -235,9 +216,6 @@ class AIOHTTPTransport(Transport):
             A Response object compatible with zeep
 
         """
-        if self.session is None:
-            async with self:
-                return await self._get(address, params, headers)
         return await self._get(address, params, headers)
 
     async def _get(
@@ -253,20 +231,13 @@ class AIOHTTPTransport(Transport):
         headers = headers or {}
         headers.setdefault("User-Agent", f"Zeep/{get_version()}")
 
-        # Determine timeout
-        timeout = self.operation_timeout or self.timeout
-        if timeout:
-            client_timeout = ClientTimeout(total=timeout)
-        else:
-            client_timeout = None
-
         try:
             response = await self.session.get(
                 address,
                 params=params,
                 headers=headers,
                 proxy=self.proxy,
-                timeout=client_timeout,
+                timeout=self._client_timeout,
             )
             response.raise_for_status()
 
