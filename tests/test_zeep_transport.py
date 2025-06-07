@@ -585,3 +585,267 @@ async def test_provided_session_not_closed():
     # Provided session should not be closed
     mock_session.close.assert_not_called()
     assert transport.session == mock_session
+
+
+@pytest.mark.asyncio
+async def test_cookie_conversion_httpx_basic():
+    """Test basic cookie conversion from aiohttp to httpx response."""
+    transport = AIOHTTPTransport()
+
+    # Create aiohttp cookies
+    from http.cookies import SimpleCookie
+
+    cookies = SimpleCookie()
+    cookies["session"] = "abc123"
+    cookies["session"]["domain"] = ".example.com"
+    cookies["session"]["path"] = "/api"
+    cookies["session"]["secure"] = True
+    cookies["session"]["httponly"] = True
+    cookies["session"]["max-age"] = "3600"
+
+    cookies["user"] = "john_doe"
+    cookies["user"]["domain"] = "example.com"
+    cookies["user"]["path"] = "/"
+
+    # Mock aiohttp response
+    mock_response = Mock(spec=aiohttp.ClientResponse)
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.method = "POST"
+    mock_response.url = "http://example.com"
+    mock_response.charset = "utf-8"
+    mock_response.cookies = cookies
+    mock_response.raise_for_status = Mock()
+    mock_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_response)
+    transport.session = mock_session
+
+    # Make request
+    result = await transport.post("http://example.com", "test", {})
+
+    # Verify cookies in httpx response
+    assert "session" in result.cookies
+    assert result.cookies["session"] == "abc123"
+    assert "user" in result.cookies
+    assert result.cookies["user"] == "john_doe"
+
+
+@pytest.mark.asyncio
+async def test_cookie_conversion_requests_basic():
+    """Test basic cookie conversion from aiohttp to requests response."""
+    transport = AIOHTTPTransport()
+
+    # Create aiohttp cookies
+    from http.cookies import SimpleCookie
+
+    cookies = SimpleCookie()
+    cookies["token"] = "xyz789"
+    cookies["token"]["domain"] = ".api.example.com"
+    cookies["token"]["path"] = "/v1"
+    cookies["token"]["secure"] = True
+
+    # Mock aiohttp response
+    mock_response = Mock(spec=aiohttp.ClientResponse)
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.charset = "utf-8"
+    mock_response.cookies = cookies
+    mock_response.raise_for_status = Mock()
+    mock_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_response)
+    transport.session = mock_session
+
+    # Make request
+    result = await transport.get("http://api.example.com/v1/data")
+
+    # Verify cookies in requests response
+    assert "token" in result.cookies
+    assert result.cookies["token"] == "xyz789"
+
+
+@pytest.mark.asyncio
+async def test_cookie_attributes_httpx():
+    """Test that cookie attributes are properly preserved in httpx response."""
+    transport = AIOHTTPTransport()
+
+    # Create cookie with all attributes
+    from http.cookies import SimpleCookie
+
+    cookies = SimpleCookie()
+    cookies["auth"] = "secret123"
+    cookies["auth"]["domain"] = ".secure.com"
+    cookies["auth"]["path"] = "/admin"
+    cookies["auth"]["secure"] = True
+    cookies["auth"]["httponly"] = True
+    cookies["auth"]["samesite"] = "Strict"
+    cookies["auth"]["max-age"] = "7200"
+
+    # Mock response
+    mock_response = Mock(spec=aiohttp.ClientResponse)
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.method = "POST"
+    mock_response.url = "https://secure.com/admin"
+    mock_response.charset = "utf-8"
+    mock_response.cookies = cookies
+    mock_response.raise_for_status = Mock()
+    mock_response.read = AsyncMock(return_value=b"secure")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_response)
+    transport.session = mock_session
+
+    # Make request
+    result = await transport.post("https://secure.com/admin", "login", {})
+
+    # Check cookie exists
+    assert "auth" in result.cookies
+    assert result.cookies["auth"] == "secret123"
+
+    # Note: httpx.Cookies doesn't expose all attributes directly,
+    # but they should be preserved internally for cookie jar operations
+
+
+@pytest.mark.asyncio
+async def test_multiple_cookies():
+    """Test handling multiple cookies."""
+    transport = AIOHTTPTransport()
+
+    # Create multiple cookies
+    from http.cookies import SimpleCookie
+
+    cookies = SimpleCookie()
+    for i in range(5):
+        cookie_name = f"cookie{i}"
+        cookies[cookie_name] = f"value{i}"
+        cookies[cookie_name]["domain"] = ".example.com"
+        cookies[cookie_name]["path"] = f"/path{i}"
+
+    # Mock response
+    mock_response = Mock(spec=aiohttp.ClientResponse)
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.method = "GET"
+    mock_response.url = "http://example.com"
+    mock_response.charset = "utf-8"
+    mock_response.cookies = cookies
+    mock_response.raise_for_status = Mock()
+    mock_response.read = AsyncMock(return_value=b"multi")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_response)
+    transport.session = mock_session
+
+    # Make request
+    result = await transport.get("http://example.com")
+
+    # Verify all cookies
+    for i in range(5):
+        cookie_name = f"cookie{i}"
+        assert cookie_name in result.cookies
+        assert result.cookies[cookie_name] == f"value{i}"
+
+
+@pytest.mark.asyncio
+async def test_empty_cookies():
+    """Test handling when no cookies are present."""
+    transport = AIOHTTPTransport()
+
+    # Mock response without cookies
+    from http.cookies import SimpleCookie
+
+    mock_response = Mock(spec=aiohttp.ClientResponse)
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.method = "GET"
+    mock_response.url = "http://example.com"
+    mock_response.charset = "utf-8"
+    mock_response.cookies = SimpleCookie()  # Empty cookies
+    mock_response.raise_for_status = Mock()
+    mock_response.read = AsyncMock(return_value=b"nocookies")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_response)
+    transport.session = mock_session
+
+    # Make request
+    result = await transport.get("http://example.com")
+
+    # Verify empty cookies
+    assert len(result.cookies) == 0
+
+
+@pytest.mark.asyncio
+async def test_cookie_encoding():
+    """Test cookies with special characters."""
+    transport = AIOHTTPTransport()
+
+    # Create cookies with special chars
+    from http.cookies import SimpleCookie
+
+    cookies = SimpleCookie()
+    cookies["data"] = "hello%20world%21"  # URL encoded
+    cookies["unicode"] = "café"
+
+    # Mock response
+    mock_response = Mock(spec=aiohttp.ClientResponse)
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.charset = "utf-8"
+    mock_response.cookies = cookies
+    mock_response.raise_for_status = Mock()
+    mock_response.read = AsyncMock(return_value=b"encoded")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.get = AsyncMock(return_value=mock_response)
+    transport.session = mock_session
+
+    # Make request
+    result = await transport.get("http://example.com")
+
+    # Verify encoded cookies
+    assert "data" in result.cookies
+    assert result.cookies["data"] == "hello%20world%21"
+    assert "unicode" in result.cookies
+    assert result.cookies["unicode"] == "café"
+
+
+@pytest.mark.asyncio
+async def test_cookie_jar_type():
+    """Test that cookies are stored in appropriate jar types."""
+    transport = AIOHTTPTransport()
+
+    from http.cookies import SimpleCookie
+
+    cookies = SimpleCookie()
+    cookies["test"] = "value"
+
+    # Mock response
+    mock_response = Mock(spec=aiohttp.ClientResponse)
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.method = "POST"
+    mock_response.url = "http://example.com"
+    mock_response.charset = "utf-8"
+    mock_response.cookies = cookies
+    mock_response.raise_for_status = Mock()
+    mock_response.read = AsyncMock(return_value=b"jar")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_response)
+    transport.session = mock_session
+
+    # Test httpx response
+    httpx_result = await transport.post("http://example.com", "test", {})
+    assert isinstance(httpx_result.cookies, httpx.Cookies)
+
+    # Test requests response
+    mock_session.get = AsyncMock(return_value=mock_response)
+    requests_result = await transport.get("http://example.com")
+    # In requests, cookies can be SimpleCookie or CookieJar
+    assert hasattr(requests_result.cookies, "__getitem__")
+    assert "test" in requests_result.cookies

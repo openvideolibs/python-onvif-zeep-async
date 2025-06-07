@@ -98,12 +98,24 @@ class AIOHTTPTransport(Transport):
         # Store cookies if any
         if aiohttp_response.cookies:
             for cookie in aiohttp_response.cookies.values():
-                httpx_response.cookies.set(
-                    cookie.key,
-                    cookie.value,
-                    domain=cookie.get("domain"),
-                    path=cookie.get("path"),
-                )
+                # Extract all cookie attributes
+                cookie_attrs = {}
+                if cookie.get("domain"):
+                    cookie_attrs["domain"] = cookie.get("domain")
+                if cookie.get("path"):
+                    cookie_attrs["path"] = cookie.get("path")
+                if cookie.get("secure"):
+                    cookie_attrs["secure"] = True
+                if cookie.get("httponly"):
+                    cookie_attrs["httpOnly"] = True
+                if cookie.get("max-age"):
+                    cookie_attrs["max_age"] = int(cookie.get("max-age"))
+                if cookie.get("expires"):
+                    cookie_attrs["expires"] = cookie.get("expires")
+                if cookie.get("samesite"):
+                    cookie_attrs["samesite"] = cookie.get("samesite")
+
+                httpx_response.cookies.set(cookie.key, cookie.value, **cookie_attrs)
 
         return httpx_response
 
