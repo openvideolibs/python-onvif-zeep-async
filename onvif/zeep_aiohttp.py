@@ -159,16 +159,17 @@ class AIOHTTPTransport(Transport):
                 proxy=self.proxy,
                 timeout=self._client_timeout,
             )
-            response.raise_for_status()
 
-            # Read the content to log it
+            # Read the content to log it before checking status
             content = await response.read()
             _LOGGER.debug(
                 "HTTP Response from %s (status: %d):\n%s",
                 address,
                 response.status,
-                content.decode("utf-8", errors="replace"),
+                content,
             )
+
+            response.raise_for_status()
 
             # Convert to httpx Response
             return self._aiohttp_to_httpx_response(response, content)
@@ -236,16 +237,18 @@ class AIOHTTPTransport(Transport):
                 proxy=self.proxy,
                 timeout=self._client_timeout,
             )
-            response.raise_for_status()
 
-            # Read content
+            # Read content and log before checking status
             content = await response.read()
 
             _LOGGER.debug(
-                "HTTP Response from %s (status: %d)",
+                "HTTP Response from %s (status: %d):\n%s",
                 address,
                 response.status,
+                content,
             )
+
+            response.raise_for_status()
 
             # Convert directly to requests.Response
             return self._aiohttp_to_requests_response(response, content)

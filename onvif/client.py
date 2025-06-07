@@ -248,12 +248,12 @@ class ONVIFService:
         self.dt_diff = dt_diff
         self.binding_name = binding_name
         # Create soap client
-        connector = TCPConnector(
+        self._connector = TCPConnector(
             ssl=_NO_VERIFY_SSL_CONTEXT,
             keepalive_timeout=KEEPALIVE_EXPIRY,
         )
-        session = ClientSession(
-            connector=connector,
+        self._session = ClientSession(
+            connector=self._connector,
             timeout=aiohttp.ClientTimeout(
                 total=_DEFAULT_TIMEOUT,
                 connect=_CONNECT_TIMEOUT,
@@ -262,12 +262,12 @@ class ONVIFService:
         )
         self.transport = (
             AsyncTransportProtocolErrorHandler(
-                session=session,
+                session=self._session,
                 verify_ssl=False,
             )
             if no_cache
             else AIOHTTPTransport(
-                session=session,
+                session=self._session,
                 verify_ssl=False,
                 cache=SqliteCache(),
             )
@@ -316,6 +316,8 @@ class ONVIFService:
     async def close(self):
         """Close the transport."""
         await self.transport.aclose()
+        await self._session.close()
+        await self._connector.close()
 
     @staticmethod
     @safe_func
