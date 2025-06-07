@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 import asyncio
 import datetime as dt
 import logging
-from typing import TYPE_CHECKING, Any
+from abc import abstractmethod
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
-import httpx
-from httpx import TransportError
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
 from zeep.wsdl.bindings.soap import SoapOperation
 
+import aiohttp
 from onvif.exceptions import ONVIFError
 
 from .settings import DEFAULT_SETTINGS
@@ -27,8 +26,8 @@ logger = logging.getLogger("onvif")
 
 _RENEWAL_PERCENTAGE = 0.8
 
-SUBSCRIPTION_ERRORS = (Fault, asyncio.TimeoutError, TransportError)
-RENEW_ERRORS = (ONVIFError, httpx.RequestError, XMLParseError, *SUBSCRIPTION_ERRORS)
+SUBSCRIPTION_ERRORS = (Fault, asyncio.TimeoutError, aiohttp.ClientError)
+RENEW_ERRORS = (ONVIFError, aiohttp.ClientError, XMLParseError, *SUBSCRIPTION_ERRORS)
 SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 
 # If the camera returns a subscription with a termination time that is less than
@@ -87,7 +86,8 @@ class BaseManager:
         await self._subscription.Unsubscribe()
 
     async def shutdown(self) -> None:
-        """Shutdown the manager.
+        """
+        Shutdown the manager.
 
         This method is irreversible.
         """
@@ -105,7 +105,7 @@ class BaseManager:
         """Set the synchronization point."""
         try:
             await self._service.SetSynchronizationPoint()
-        except (Fault, asyncio.TimeoutError, TransportError, TypeError):
+        except (TimeoutError, Fault, aiohttp.ClientError, TypeError):
             logger.debug("%s: SetSynchronizationPoint failed", self._service.url)
 
     def _cancel_renewals(self) -> None:
@@ -214,7 +214,8 @@ class NotificationManager(BaseManager):
         super().__init__(device, interval, subscription_lost_callback)
 
     async def _start(self) -> float:
-        """Start the notification processor.
+        """
+        Start the notification processor.
 
         Returns the next renewal call at time.
         """
@@ -290,7 +291,8 @@ class PullPointManager(BaseManager):
     """Manager for PullPoint."""
 
     async def _start(self) -> float:
-        """Start the PullPoint manager.
+        """
+        Start the PullPoint manager.
 
         Returns the next renewal call at time.
         """
