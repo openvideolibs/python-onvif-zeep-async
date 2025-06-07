@@ -15,7 +15,7 @@ from zeep.exceptions import Fault
 from multidict import CIMultiDict
 from yarl import URL
 
-utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.UTC)
+utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
 
 # This does blocking I/O (stat) so we cache the result
 # to minimize the impact of the blocking I/O.
