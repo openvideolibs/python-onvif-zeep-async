@@ -585,49 +585,48 @@ class ONVIFCamera:
         if uri is None:
             return None
 
-        # Create a new session with appropriate auth
-        connector = TCPConnector(ssl=_NO_VERIFY_SSL_CONTEXT)
-        middlewares = []
-        auth = None
+        auth: BasicAuth | None = None
+        middlewares: tuple[DigestAuthMiddleware, ...] | None = None
 
         if self.user and self.passwd:
             if basic_auth:
                 auth = BasicAuth(self.user, self.passwd)
             else:
                 # Use DigestAuthMiddleware for digest auth
-                middlewares.append(DigestAuthMiddleware(self.user, self.passwd))
+                middlewares = (DigestAuthMiddleware(self.user, self.passwd),)
 
-        async with ClientSession(
-            connector=connector, auth=auth, middlewares=middlewares
-        ) as session:
-            response = await self._try_snapshot_uri_with_session(session, uri)
+        response = await self._try_snapshot_uri(uri, auth=auth, middlewares=middlewares)
+        content = await response.read()
+
+        # If the request fails with a 401, strip user/pass from URL and retry
+        if (
+            response.status == 401
+            and (stripped_uri := strip_user_pass_url(uri))
+            and stripped_uri != uri
+        ):
+            response = await self._try_snapshot_uri(
+                stripped_uri, auth=auth, middlewares=middlewares
+            )
             content = await response.read()
 
-            # If the request fails with a 401, make sure to strip any
-            # sample user/pass from the URL and try again
-            if (
-                response.status == 401
-                and (stripped_uri := strip_user_pass_url(uri))
-                and stripped_uri != uri
-            ):
-                response = await self._try_snapshot_uri_with_session(
-                    session, stripped_uri
-                )
-                content = await response.read()
+        if response.status == 401:
+            raise ONVIFAuthError(f"Failed to authenticate to {uri}")
 
-            if response.status == 401:
-                raise ONVIFAuthError(f"Failed to authenticate to {uri}")
+        if response.status < 300:
+            return content
 
-            if response.status < 300:
-                return content
+        return None
 
-            return None
-
-    async def _try_snapshot_uri_with_session(
-        self, session: ClientSession, uri: str
+    async def _try_snapshot_uri(
+        self,
+        uri: str,
+        auth: BasicAuth | None = None,
+        middlewares: tuple[DigestAuthMiddleware, ...] | None = None,
     ) -> aiohttp.ClientResponse:
         try:
-            return await session.get(uri)
+            return await self._snapshot_client.get(
+                uri, auth=auth, middlewares=middlewares
+            )
         except TimeoutError as error:
             raise ONVIFTimeoutError(
                 f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
