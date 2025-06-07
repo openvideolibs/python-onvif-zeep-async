@@ -849,6 +849,6 @@ async def test_cookie_jar_type():
     # Test requests response
     mock_session.get = AsyncMock(return_value=mock_response)
     requests_result = await transport.get("http://example.com")
-    # In requests, cookies can be SimpleCookie or CookieJar
+    # Verify cookies are accessible in requests response
     assert hasattr(requests_result.cookies, "__getitem__")
     assert "test" in requests_result.cookies

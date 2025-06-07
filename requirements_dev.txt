@@ -1,9 +1,6 @@
 # Package
 -r requirements.txt
 
-# Examples
-aiohttp==3.12.10
-
 # Dev
 pytest==8.3.5
 pytest-cov==6.1.1
