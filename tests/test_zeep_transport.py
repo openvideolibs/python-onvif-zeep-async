@@ -868,3 +868,46 @@ async def test_cookie_jar_type():
     # Verify cookies are accessible in requests response
     assert hasattr(requests_result.cookies, "__getitem__")
     assert "test" in requests_result.cookies
+
+
+@pytest.mark.asyncio
+async def test_http_error_responses_no_exception():
+    """Test that HTTP error responses (401, 500, etc.) don't raise exceptions."""
+    mock_session = create_mock_session()
+    transport = AIOHTTPTransport(session=mock_session)
+
+    # Test 401 Unauthorized
+    mock_401_response = Mock(spec=aiohttp.ClientResponse)
+    mock_401_response.status = 401
+    mock_401_response.headers = {"Content-Type": "text/xml"}
+    mock_401_response.method = "POST"
+    mock_401_response.url = "http://example.com/service"
+    mock_401_response.charset = "utf-8"
+    mock_401_response.cookies = {}
+    mock_401_response.read = AsyncMock(return_value=b"<error>Unauthorized</error>")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_401_response)
+    transport.session = mock_session
+
+    # Should not raise exception
+    result = await transport.post("http://example.com/service", "<request/>", {})
+    assert isinstance(result, httpx.Response)
+    assert result.status_code == 401
+    assert result.read() == b"<error>Unauthorized</error>"
+
+    # Test 500 Internal Server Error
+    mock_500_response = Mock(spec=aiohttp.ClientResponse)
+    mock_500_response.status = 500
+    mock_500_response.headers = {"Content-Type": "text/xml"}
+    mock_500_response.charset = "utf-8"
+    mock_500_response.cookies = {}
+    mock_500_response.read = AsyncMock(return_value=b"<error>Server Error</error>")
+
+    mock_session.get = AsyncMock(return_value=mock_500_response)
+
+    # Should not raise exception
+    result = await transport.get("http://example.com/wsdl")
+    assert isinstance(result, RequestsResponse)
+    assert result.status_code == 500
+    assert result.content == b"<error>Server Error</error>"
