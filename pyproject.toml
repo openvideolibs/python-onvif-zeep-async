@@ -5,5 +5,8 @@ log_level="NOTSET"
 plugins = ["covdefaults"]
 
 
+[tool.ruff]
+target-version = "py310"
+
 [build-system]
 requires = ['setuptools>=65.4.1', 'wheel']

@@ -46,6 +46,14 @@ async def test_normalize_url_with_missing_url():
 def test_strip_user_pass_url():
     assert strip_user_pass_url("http://1.2.3.4/?user=foo&pass=bar") == "http://1.2.3.4/"
     assert strip_user_pass_url("http://1.2.3.4/") == "http://1.2.3.4/"
+    # Test with userinfo in URL
+    assert strip_user_pass_url("http://user:pass@1.2.3.4/") == "http://1.2.3.4/"
+    assert strip_user_pass_url("http://user@1.2.3.4/") == "http://1.2.3.4/"
+    # Test with both userinfo and query params
+    assert (
+        strip_user_pass_url("http://user:pass@1.2.3.4/?username=foo&password=bar")
+        == "http://1.2.3.4/"
+    )
 
 
 def test_obscure_user_pass_url():
@@ -54,3 +62,18 @@ def test_obscure_user_pass_url():
         == "http://1.2.3.4/?user=********&pass=********"
     )
     assert obscure_user_pass_url("http://1.2.3.4/") == "http://1.2.3.4/"
+    # Test with userinfo in URL
+    assert (
+        obscure_user_pass_url("http://user:pass@1.2.3.4/")
+        == "http://user:********@1.2.3.4/"
+    )
+    assert obscure_user_pass_url("http://user@1.2.3.4/") == "http://********@1.2.3.4/"
+    # Test with both userinfo and query params
+    assert (
+        obscure_user_pass_url("http://user:pass@1.2.3.4/?username=foo&password=bar")
+        == "http://user:********@1.2.3.4/?username=********&password=********"
+    )
+    assert (
+        obscure_user_pass_url("http://user@1.2.3.4/?password=bar")
+        == "http://********@1.2.3.4/?password=********"
+    )

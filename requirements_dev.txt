@@ -1,14 +1,12 @@
 # Package
 -r requirements.txt
 
-# Examples
-aiohttp==3.12.10
-
 # Dev
 pytest==8.3.5
 pytest-cov==6.1.1
 pytest-asyncio==0.26.0
 covdefaults==2.3.0
+aioresponses==0.7.6
 
 # pre-commit
 pre-commit==4.2.0

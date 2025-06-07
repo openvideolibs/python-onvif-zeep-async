@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
 import logging
+from collections.abc import Awaitable, Callable
 from typing import ParamSpec, TypeVar
-from collections.abc import Callable
 
-import httpx
+import aiohttp
 
 from .const import BACKOFF_TIME, DEFAULT_ATTEMPTS
 
@@ -19,14 +18,15 @@ logger = logging.getLogger("onvif")
 
 def retry_connection_error(
     attempts: int = DEFAULT_ATTEMPTS,
-    exception: httpx.HTTPError = httpx.RequestError,
+    exception: type[Exception] = aiohttp.ClientError,
 ) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Define a wrapper to retry on connection error."""
 
     def _decorator_retry_connection_error(
         func: Callable[P, Awaitable[T]],
     ) -> Callable[P, Awaitable[T]]:
-        """Define a wrapper to retry on connection error.
+        """
+        Define a wrapper to retry on connection error.
 
         The remote server is allowed to disconnect us any time so
         we need to retry the operation.
@@ -40,11 +40,11 @@ def retry_connection_error(
                     return await func(*args, **kwargs)
                 except exception as ex:
                     #
-                    # We should only need to retry on RemoteProtocolError but some cameras
+                    # We should only need to retry on ServerDisconnectedError but some cameras
                     # are flakey and sometimes do not respond to the Renew request so we
-                    # retry on RequestError as well.
+                    # retry on ClientError as well.
                     #
-                    # For RemoteProtocolError:
+                    # For ServerDisconnectedError:
                     # http://datatracker.ietf.org/doc/html/rfc2616#section-8.1.4 allows the server
                     # to close the connection at any time, we treat this as a normal and try again
                     # once since we do not want to declare the camera as not supporting PullPoint
