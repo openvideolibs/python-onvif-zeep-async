@@ -201,7 +201,7 @@ async def test_connection_error_handling():
 
     transport.session = mock_session
 
-    with pytest.raises(ConnectionError, match="Error connecting to"):
+    with pytest.raises(aiohttp.ClientError, match="Connection failed"):
         await transport.get("http://example.com/wsdl")
 
 

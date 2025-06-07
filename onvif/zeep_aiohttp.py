@@ -11,7 +11,6 @@ from zeep.transports import Transport
 from zeep.utils import get_version
 from zeep.wsdl.utils import etree_to_string
 
-import aiohttp
 import httpx
 from aiohttp import ClientResponse, ClientSession
 from requests import Response
@@ -176,8 +175,6 @@ class AIOHTTPTransport(Transport):
 
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
-        except aiohttp.ClientError as exc:
-            raise ConnectionError(f"Error connecting to {address}: {exc}") from exc
 
     async def post_xml(
         self, address: str, envelope: _Element, headers: dict[str, str]
@@ -255,8 +252,6 @@ class AIOHTTPTransport(Transport):
 
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
-        except aiohttp.ClientError as exc:
-            raise ConnectionError(f"Error connecting to {address}: {exc}") from exc
 
     def _httpx_to_requests_response(self, response: httpx.Response) -> Response:
         """Convert an httpx.Response object to a requests.Response object"""
