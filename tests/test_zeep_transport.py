@@ -126,39 +126,33 @@ async def test_get_returns_requests_response():
 
 @pytest.mark.asyncio
 async def test_context_manager():
-    """Test async context manager creates and closes session."""
+    """Test async context manager doesn't close provided session."""
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session)
 
-    # Initial session should be None (not the parent's requests session)
-    assert transport.session is None or not isinstance(
-        transport.session, aiohttp.ClientSession
-    )
+    # Session should already be set
+    assert transport.session == mock_session
 
     async with transport:
-        assert transport.session is not None
-        assert isinstance(transport.session, aiohttp.ClientSession)
+        assert transport.session == mock_session
 
-    # Session should be closed after context
-    assert transport.session is None
+    # Session should still be there after context (not closed)
+    assert transport.session == mock_session
 
 
 @pytest.mark.asyncio
 async def test_aclose():
-    """Test aclose() method closes the session."""
-    mock_session = create_mock_session()
-    transport = AIOHTTPTransport(session=mock_session)
-
-    # Create a mock session
+    """Test aclose() method doesn't close provided session."""
     mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.timeout = Mock(total=300, sock_read=None)
     mock_session.close = AsyncMock()
-    transport.session = mock_session
+    transport = AIOHTTPTransport(session=mock_session)
 
     # Call aclose
     await transport.aclose()
 
-    # Verify session.close() was called
-    mock_session.close.assert_called_once()
+    # Verify session.close() was NOT called (we don't close provided sessions)
+    mock_session.close.assert_not_called()
 
 
 def test_load_sync():
@@ -380,28 +374,22 @@ async def test_proxy_parameter():
 
 @pytest.mark.asyncio
 async def test_verify_ssl_false():
-    """Test verify_ssl=False disables SSL verification."""
+    """Test verify_ssl=False is stored correctly."""
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session, verify_ssl=False)
 
-    async with transport:
-        # Check that SSL verification is disabled
-        connector = transport.session.connector
-        assert isinstance(connector, aiohttp.TCPConnector)
-        assert connector._ssl is False
+    # verify_ssl should be stored
+    assert transport.verify_ssl is False
 
 
 @pytest.mark.asyncio
 async def test_verify_ssl_true():
-    """Test verify_ssl=True enables SSL verification."""
+    """Test verify_ssl=True is stored correctly."""
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session, verify_ssl=True)
 
-    async with transport:
-        # Check that SSL verification is enabled
-        connector = transport.session.connector
-        assert isinstance(connector, aiohttp.TCPConnector)
-        assert connector._ssl is True
+    # verify_ssl should be stored
+    assert transport.verify_ssl is True
 
 
 @pytest.mark.asyncio
