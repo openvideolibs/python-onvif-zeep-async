@@ -7,7 +7,7 @@ import datetime as dt
 import logging
 import os.path
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 import zeep.helpers
 from zeep.cache import SqliteCache
@@ -162,6 +162,27 @@ async def _cached_document(url: str) -> Document:
     document = await loop.run_in_executor(None, _load_document)
     _DOCUMENT_CACHE[url] = document
     return document
+
+
+_T = TypeVar("_T")
+
+
+def handle_snapshot_errors(func: Callable[..., _T]) -> Callable[..., _T]:
+    """Decorator to handle snapshot URI errors."""
+
+    async def wrapper(self, uri: str, *args: Any, **kwargs: Any) -> _T:
+        try:
+            return await func(self, uri, *args, **kwargs)
+        except TimeoutError as error:
+            raise ONVIFTimeoutError(
+                f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
+            ) from error
+        except aiohttp.ClientError as error:
+            raise ONVIFError(
+                f"Error fetching {obscure_user_pass_url(uri)}: {error}"
+            ) from error
+
+    return wrapper
 
 
 class ZeepAsyncClient(BaseZeepAsyncClient):
@@ -601,7 +622,7 @@ class ONVIFCamera:
                 middlewares = (DigestAuthMiddleware(self.user, self.passwd),)
 
         response = await self._try_snapshot_uri(uri, auth=auth, middlewares=middlewares)
-        content = await response.read()
+        content = await self._try_read_snapshot_content(uri, response)
 
         # If the request fails with a 401, strip user/pass from URL and retry
         if (
@@ -612,7 +633,7 @@ class ONVIFCamera:
             response = await self._try_snapshot_uri(
                 stripped_uri, auth=auth, middlewares=middlewares
             )
-            content = await response.read()
+            content = await self._try_read_snapshot_content(uri, response)
 
         if response.status == 401:
             raise ONVIFAuthError(f"Failed to authenticate to {uri}")
@@ -622,24 +643,23 @@ class ONVIFCamera:
 
         return None
 
+    @handle_snapshot_errors
+    async def _try_read_snapshot_content(
+        self,
+        uri: str,
+        response: aiohttp.ClientResponse,
+    ) -> bytes:
+        """Try to read the snapshot URI."""
+        return await response.read()
+
+    @handle_snapshot_errors
     async def _try_snapshot_uri(
         self,
         uri: str,
         auth: BasicAuth | None = None,
         middlewares: tuple[DigestAuthMiddleware, ...] | None = None,
     ) -> aiohttp.ClientResponse:
-        try:
-            return await self._snapshot_client.get(
-                uri, auth=auth, middlewares=middlewares
-            )
-        except TimeoutError as error:
-            raise ONVIFTimeoutError(
-                f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
-            ) from error
-        except aiohttp.ClientError as error:
-            raise ONVIFError(
-                f"Error fetching {obscure_user_pass_url(uri)}: {error}"
-            ) from error
+        return await self._snapshot_client.get(uri, auth=auth, middlewares=middlewares)
 
     def get_definition(
         self, name: str, port_type: str | None = None

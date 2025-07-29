@@ -171,6 +171,9 @@ class AIOHTTPTransport(Transport):
 
             # Convert to httpx Response
             return self._aiohttp_to_httpx_response(response, content)
+        except RuntimeError as exc:
+            # Handle RuntimeError which may occur if the session is closed
+            raise RuntimeError(f"Failed to post to {address}: {exc}") from exc
 
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
@@ -248,6 +251,9 @@ class AIOHTTPTransport(Transport):
 
             # Convert directly to requests.Response
             return self._aiohttp_to_requests_response(response, content)
+        except RuntimeError as exc:
+            # Handle RuntimeError which may occur if the session is closed
+            raise RuntimeError(f"Failed to get from {address}: {exc}") from exc
 
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
