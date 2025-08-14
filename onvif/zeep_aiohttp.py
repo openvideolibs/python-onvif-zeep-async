@@ -10,10 +10,11 @@ from zeep.cache import SqliteCache
 from zeep.transports import Transport
 from zeep.utils import get_version
 from zeep.wsdl.utils import etree_to_string
-
+from multidict import CIMultiDict
 import httpx
-from aiohttp import ClientResponse, ClientSession
+from aiohttp import ClientResponse, ClientSession, hdrs
 from requests import Response
+from requests.structures import CaseInsensitiveDict
 
 if TYPE_CHECKING:
     from lxml.etree import _Element
@@ -65,6 +66,15 @@ class AIOHTTPTransport(Transport):
     async def aclose(self) -> None:
         """Close the transport session."""
 
+    def _filter_headers(self, headers: CIMultiDict[str]) -> list[tuple[str, str]]:
+        """Filter out Content-Encoding header.
+
+        Since aiohttp has already decompressed the content, we need to
+        remove the Content-Encoding header to prevent zeep from trying
+        to decompress it again, which would cause a zlib error.
+        """
+        return [(k, v) for k, v in headers.items() if k != hdrs.CONTENT_ENCODING]
+
     def _aiohttp_to_httpx_response(
         self, aiohttp_response: ClientResponse, content: bytes
     ) -> httpx.Response:
@@ -72,7 +82,7 @@ class AIOHTTPTransport(Transport):
         # Create httpx Response with the content
         httpx_response = httpx.Response(
             status_code=aiohttp_response.status,
-            headers=httpx.Headers(aiohttp_response.headers),
+            headers=httpx.Headers(self._filter_headers(aiohttp_response.headers)),
             content=content,
             request=httpx.Request(
                 method=aiohttp_response.method,
@@ -104,7 +114,10 @@ class AIOHTTPTransport(Transport):
         new = Response()
         new._content = content
         new.status_code = aiohttp_response.status
-        new.headers = dict(aiohttp_response.headers)
+        # Use dict comprehension for requests.Response headers
+        new.headers = CaseInsensitiveDict(
+            self._filter_headers(aiohttp_response.headers)
+        )
         # Convert aiohttp cookies to requests format
         if aiohttp_response.cookies:
             for name, cookie in aiohttp_response.cookies.items():
@@ -117,27 +130,10 @@ class AIOHTTPTransport(Transport):
         new.encoding = aiohttp_response.charset
         return new
 
-    async def post(
-        self, address: str, message: str, headers: dict[str, str]
-    ) -> httpx.Response:
-        """
-        Perform async POST request.
-
-        Args:
-            address: The URL to send the request to
-            message: The message to send
-            headers: HTTP headers to include
-
-        Returns:
-            The httpx response object
-
-        """
-        return await self._post(address, message, headers)
-
-    async def _post(
-        self, address: str, message: str, headers: dict[str, str]
-    ) -> httpx.Response:
-        """Internal POST implementation."""
+    async def _post_internal(
+        self, address: str, message: str | bytes, headers: dict[str, str]
+    ) -> tuple[ClientResponse, bytes]:
+        """Internal POST implementation that returns aiohttp response and content."""
         _LOGGER.debug("HTTP Post to %s:\n%s", address, message)
 
         # Set default headers
@@ -169,14 +165,30 @@ class AIOHTTPTransport(Transport):
                 content,
             )
 
-            # Convert to httpx Response
-            return self._aiohttp_to_httpx_response(response, content)
+            return response, content
         except RuntimeError as exc:
             # Handle RuntimeError which may occur if the session is closed
             raise RuntimeError(f"Failed to post to {address}: {exc}") from exc
-
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
+
+    async def post(
+        self, address: str, message: str, headers: dict[str, str]
+    ) -> httpx.Response:
+        """
+        Perform async POST request.
+
+        Args:
+            address: The URL to send the request to
+            message: The message to send
+            headers: HTTP headers to include
+
+        Returns:
+            The httpx response object
+
+        """
+        response, content = await self._post_internal(address, message, headers)
+        return self._aiohttp_to_httpx_response(response, content)
 
     async def post_xml(
         self, address: str, envelope: _Element, headers: dict[str, str]
@@ -194,8 +206,8 @@ class AIOHTTPTransport(Transport):
 
         """
         message = etree_to_string(envelope)
-        response = await self.post(address, message, headers)
-        return self._httpx_to_requests_response(response)
+        response, content = await self._post_internal(address, message, headers)
+        return self._aiohttp_to_requests_response(response, content)
 
     async def get(
         self,
@@ -215,15 +227,6 @@ class AIOHTTPTransport(Transport):
             A Response object compatible with zeep
 
         """
-        return await self._get(address, params, headers)
-
-    async def _get(
-        self,
-        address: str,
-        params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-    ) -> Response:
-        """Internal GET implementation."""
         _LOGGER.debug("HTTP Get from %s", address)
 
         # Set default headers
@@ -257,18 +260,6 @@ class AIOHTTPTransport(Transport):
 
         except TimeoutError as exc:
             raise TimeoutError(f"Request to {address} timed out") from exc
-
-    def _httpx_to_requests_response(self, response: httpx.Response) -> Response:
-        """Convert an httpx.Response object to a requests.Response object"""
-        body = response.read()
-
-        new = Response()
-        new._content = body
-        new.status_code = response.status_code
-        new.headers = response.headers
-        new.cookies = response.cookies
-        new.encoding = response.encoding
-        return new
 
     def load(self, url: str) -> bytes:
         """
