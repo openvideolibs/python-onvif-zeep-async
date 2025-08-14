@@ -1,5 +1,5 @@
 # Package
-aiohttp==3.12.14
+aiohttp==3.12.15
 ciso8601==2.3.2
 httpx==0.28.1
 zeep[async]==4.3.1
