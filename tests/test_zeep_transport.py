@@ -1,11 +1,13 @@
 """Tests for AIOHTTPTransport to ensure compatibility with zeep's AsyncTransport."""
 
+from http.cookies import SimpleCookie
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 import httpx
 import pytest
 from lxml import etree
+from multidict import CIMultiDict
 from onvif.zeep_aiohttp import AIOHTTPTransport
 from requests import Response as RequestsResponse
 
@@ -460,8 +462,6 @@ async def test_cookies_in_requests_response():
     transport = AIOHTTPTransport(session=mock_session)
 
     # Mock cookies using SimpleCookie format
-    from http.cookies import SimpleCookie
-
     mock_cookies = SimpleCookie()
     mock_cookies["session"] = "abc123"
 
@@ -606,8 +606,6 @@ async def test_cookie_conversion_httpx_basic():
     transport = AIOHTTPTransport(session=mock_session)
 
     # Create aiohttp cookies
-    from http.cookies import SimpleCookie
-
     cookies = SimpleCookie()
     cookies["session"] = "abc123"
     cookies["session"]["domain"] = ".example.com"
@@ -652,8 +650,6 @@ async def test_cookie_conversion_requests_basic():
     transport = AIOHTTPTransport(session=mock_session)
 
     # Create aiohttp cookies
-    from http.cookies import SimpleCookie
-
     cookies = SimpleCookie()
     cookies["token"] = "xyz789"
     cookies["token"]["domain"] = ".api.example.com"
@@ -688,8 +684,6 @@ async def test_cookie_attributes_httpx():
     transport = AIOHTTPTransport(session=mock_session)
 
     # Create cookie with all attributes
-    from http.cookies import SimpleCookie
-
     cookies = SimpleCookie()
     cookies["auth"] = "secret123"
     cookies["auth"]["domain"] = ".secure.com"
@@ -732,8 +726,6 @@ async def test_multiple_cookies():
     transport = AIOHTTPTransport(session=mock_session)
 
     # Create multiple cookies
-    from http.cookies import SimpleCookie
-
     cookies = SimpleCookie()
     for i in range(5):
         cookie_name = f"cookie{i}"
@@ -773,8 +765,6 @@ async def test_empty_cookies():
     transport = AIOHTTPTransport(session=mock_session)
 
     # Mock response without cookies
-    from http.cookies import SimpleCookie
-
     mock_response = Mock(spec=aiohttp.ClientResponse)
     mock_response.status = 200
     mock_response.headers = {}
@@ -803,8 +793,6 @@ async def test_cookie_encoding():
     transport = AIOHTTPTransport(session=mock_session)
 
     # Create cookies with special chars
-    from http.cookies import SimpleCookie
-
     cookies = SimpleCookie()
     cookies["data"] = "hello%20world%21"  # URL encoded
     cookies["unicode"] = "café"
@@ -838,8 +826,6 @@ async def test_cookie_jar_type():
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session)
 
-    from http.cookies import SimpleCookie
-
     cookies = SimpleCookie()
     cookies["test"] = "value"
 
@@ -868,6 +854,114 @@ async def test_cookie_jar_type():
     # Verify cookies are accessible in requests response
     assert hasattr(requests_result.cookies, "__getitem__")
     assert "test" in requests_result.cookies
+
+
+@pytest.mark.asyncio
+async def test_gzip_content_encoding_header_removed():
+    """Test that Content-Encoding: gzip header is removed after aiohttp decompresses.
+
+    This fixes the issue where aiohttp automatically decompresses gzip content
+    but the Content-Encoding header was still passed to zeep, causing it to
+    attempt decompression again on already-decompressed content, resulting in
+    zlib errors.
+    """
+    mock_session = create_mock_session()
+    transport = AIOHTTPTransport(session=mock_session)
+
+    # Mock response with Content-Encoding: gzip
+    # aiohttp will have already decompressed the content
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+    # Simulate headers with Content-Encoding: gzip
+    headers = CIMultiDict()
+    headers["Content-Type"] = "application/soap+xml; charset=utf-8"
+    headers["Content-Encoding"] = "gzip"
+    headers["Server"] = "PelcoOnvifNvt"
+    mock_aiohttp_response.headers = headers
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://camera.local/onvif/device_service"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+
+    # Content is already decompressed by aiohttp
+    decompressed_content = b'<?xml version="1.0"?><soap:Envelope>test</soap:Envelope>'
+    mock_aiohttp_response.read = AsyncMock(return_value=decompressed_content)
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
+
+    # Test httpx response (from post)
+    httpx_result = await transport.post(
+        "http://camera.local/onvif/device_service", "<request/>", {}
+    )
+
+    # Verify Content-Encoding header was removed
+    assert "content-encoding" not in httpx_result.headers
+    assert "Content-Encoding" not in httpx_result.headers
+    # Other headers should still be present
+    assert httpx_result.headers["content-type"] == "application/soap+xml; charset=utf-8"
+    assert httpx_result.headers["server"] == "PelcoOnvifNvt"
+    # Content should be the decompressed data
+    assert httpx_result.read() == decompressed_content
+
+    # Test requests response (from get)
+    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    requests_result = await transport.get("http://camera.local/onvif/device_service")
+
+    # Verify Content-Encoding header was removed from requests response too
+    assert "content-encoding" not in requests_result.headers
+    assert "Content-Encoding" not in requests_result.headers
+    # Other headers should still be present
+    assert (
+        requests_result.headers["content-type"] == "application/soap+xml; charset=utf-8"
+    )
+    assert requests_result.headers["server"] == "PelcoOnvifNvt"
+    # Content should be the decompressed data
+    assert requests_result.content == decompressed_content
+
+
+@pytest.mark.asyncio
+async def test_multiple_duplicate_headers_preserved():
+    """Test that duplicate headers (except Content-Encoding) are preserved."""
+    mock_session = create_mock_session()
+    transport = AIOHTTPTransport(session=mock_session)
+
+    # Mock response with duplicate headers
+    mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
+    mock_aiohttp_response.status = 200
+
+    # Create headers with duplicates (like multiple Set-Cookie headers)
+    headers = CIMultiDict()
+    headers.add("Set-Cookie", "session=abc123; Path=/")
+    headers.add("Set-Cookie", "user=john; Path=/api")
+    headers.add("Set-Cookie", "token=xyz789; Secure")
+    headers.add("Content-Type", "text/xml")
+    headers.add("Content-Encoding", "gzip")  # This should be removed
+
+    mock_aiohttp_response.headers = headers
+    mock_aiohttp_response.method = "POST"
+    mock_aiohttp_response.url = "http://example.com"
+    mock_aiohttp_response.charset = "utf-8"
+    mock_aiohttp_response.cookies = {}
+    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    transport.session = mock_session
+
+    # Test httpx response
+    httpx_result = await transport.post("http://example.com", "test", {})
+
+    # Content-Encoding should be removed
+    assert "content-encoding" not in httpx_result.headers
+
+    # All Set-Cookie headers should be preserved
+    set_cookie_values = httpx_result.headers.get_list("set-cookie")
+    assert len(set_cookie_values) == 3
+    assert "session=abc123; Path=/" in set_cookie_values
+    assert "user=john; Path=/api" in set_cookie_values
+    assert "token=xyz789; Secure" in set_cookie_values
 
 
 @pytest.mark.asyncio
