@@ -10,9 +10,8 @@ from zeep.cache import SqliteCache
 from zeep.transports import Transport
 from zeep.utils import get_version
 from zeep.wsdl.utils import etree_to_string
-from multidict import CIMultiDict
 import httpx
-from aiohttp import ClientResponse, ClientSession, hdrs
+from aiohttp import ClientResponse, ClientSession
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 
@@ -66,15 +65,6 @@ class AIOHTTPTransport(Transport):
     async def aclose(self) -> None:
         """Close the transport session."""
 
-    def _filter_headers(self, headers: CIMultiDict[str]) -> list[tuple[str, str]]:
-        """Filter out Content-Encoding header.
-
-        Since aiohttp has already decompressed the content, we need to
-        remove the Content-Encoding header to prevent zeep from trying
-        to decompress it again, which would cause a zlib error.
-        """
-        return [(k, v) for k, v in headers.items() if k != hdrs.CONTENT_ENCODING]
-
     def _aiohttp_to_httpx_response(
         self, aiohttp_response: ClientResponse, content: bytes
     ) -> httpx.Response:
@@ -82,7 +72,7 @@ class AIOHTTPTransport(Transport):
         # Create httpx Response with the content
         httpx_response = httpx.Response(
             status_code=aiohttp_response.status,
-            headers=httpx.Headers(self._filter_headers(aiohttp_response.headers)),
+            headers=httpx.Headers(aiohttp_response.headers),
             content=content,
             request=httpx.Request(
                 method=aiohttp_response.method,
@@ -115,9 +105,7 @@ class AIOHTTPTransport(Transport):
         new._content = content
         new.status_code = aiohttp_response.status
         # Use dict comprehension for requests.Response headers
-        new.headers = CaseInsensitiveDict(
-            self._filter_headers(aiohttp_response.headers)
-        )
+        new.headers = CaseInsensitiveDict(aiohttp_response.headers)
         # Convert aiohttp cookies to requests format
         if aiohttp_response.cookies:
             for name, cookie in aiohttp_response.cookies.items():
@@ -154,6 +142,7 @@ class AIOHTTPTransport(Transport):
                 headers=headers,
                 proxy=self.proxy,
                 timeout=self._client_timeout,
+                auto_decompress=False,  # Let zeep handle decompression
             )
 
             # Read the content to log it before checking status
@@ -240,6 +229,7 @@ class AIOHTTPTransport(Transport):
                 headers=headers,
                 proxy=self.proxy,
                 timeout=self._client_timeout,
+                auto_decompress=False,  # Let zeep handle decompression
             )
 
             # Read content and log before checking status

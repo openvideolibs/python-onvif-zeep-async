@@ -1,5 +1,6 @@
 """Tests for AIOHTTPTransport to ensure compatibility with zeep's AsyncTransport."""
 
+import gzip
 from http.cookies import SimpleCookie
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -857,19 +858,17 @@ async def test_cookie_jar_type():
 
 
 @pytest.mark.asyncio
-async def test_gzip_content_encoding_header_removed():
-    """Test that Content-Encoding: gzip header is removed after aiohttp decompresses.
+async def test_gzip_content_encoding_header_preserved():
+    """Test that Content-Encoding: gzip header is preserved when auto_decompress=False.
 
-    This fixes the issue where aiohttp automatically decompresses gzip content
-    but the Content-Encoding header was still passed to zeep, causing it to
-    attempt decompression again on already-decompressed content, resulting in
-    zlib errors.
+    With auto_decompress=False, aiohttp won't decompress the content and will
+    preserve the Content-Encoding header, allowing zeep to handle decompression.
     """
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session)
 
     # Mock response with Content-Encoding: gzip
-    # aiohttp will have already decompressed the content
+    # With auto_decompress=False, content remains compressed
     mock_aiohttp_response = Mock(spec=aiohttp.ClientResponse)
     mock_aiohttp_response.status = 200
     # Simulate headers with Content-Encoding: gzip
@@ -883,9 +882,10 @@ async def test_gzip_content_encoding_header_removed():
     mock_aiohttp_response.charset = "utf-8"
     mock_aiohttp_response.cookies = {}
 
-    # Content is already decompressed by aiohttp
-    decompressed_content = b'<?xml version="1.0"?><soap:Envelope>test</soap:Envelope>'
-    mock_aiohttp_response.read = AsyncMock(return_value=decompressed_content)
+    # Content remains compressed (simulate gzipped content)
+    original_content = b'<?xml version="1.0"?><soap:Envelope>test</soap:Envelope>'
+    compressed_content = gzip.compress(original_content)
+    mock_aiohttp_response.read = AsyncMock(return_value=compressed_content)
 
     mock_session = Mock(spec=aiohttp.ClientSession)
     mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
@@ -896,34 +896,32 @@ async def test_gzip_content_encoding_header_removed():
         "http://camera.local/onvif/device_service", "<request/>", {}
     )
 
-    # Verify Content-Encoding header was removed
-    assert "content-encoding" not in httpx_result.headers
-    assert "Content-Encoding" not in httpx_result.headers
+    # Verify Content-Encoding header is preserved
+    assert httpx_result.headers["content-encoding"] == "gzip"
     # Other headers should still be present
     assert httpx_result.headers["content-type"] == "application/soap+xml; charset=utf-8"
     assert httpx_result.headers["server"] == "PelcoOnvifNvt"
-    # Content should be the decompressed data
-    assert httpx_result.read() == decompressed_content
+    # httpx will decompress the content automatically when reading
+    assert httpx_result.read() == original_content
 
     # Test requests response (from get)
     mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
     requests_result = await transport.get("http://camera.local/onvif/device_service")
 
-    # Verify Content-Encoding header was removed from requests response too
-    assert "content-encoding" not in requests_result.headers
-    assert "Content-Encoding" not in requests_result.headers
+    # Verify Content-Encoding header is preserved in requests response too
+    assert requests_result.headers["content-encoding"] == "gzip"
     # Other headers should still be present
     assert (
         requests_result.headers["content-type"] == "application/soap+xml; charset=utf-8"
     )
     assert requests_result.headers["server"] == "PelcoOnvifNvt"
-    # Content should be the decompressed data
-    assert requests_result.content == decompressed_content
+    # Content should be the compressed data (requests doesn't auto-decompress in Response object)
+    assert requests_result.content == compressed_content
 
 
 @pytest.mark.asyncio
 async def test_multiple_duplicate_headers_preserved():
-    """Test that duplicate headers (except Content-Encoding) are preserved."""
+    """Test that duplicate headers are preserved."""
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session)
 
@@ -937,14 +935,15 @@ async def test_multiple_duplicate_headers_preserved():
     headers.add("Set-Cookie", "user=john; Path=/api")
     headers.add("Set-Cookie", "token=xyz789; Secure")
     headers.add("Content-Type", "text/xml")
-    headers.add("Content-Encoding", "gzip")  # This should be removed
+    headers.add("Content-Encoding", "gzip")  # This is now preserved
 
     mock_aiohttp_response.headers = headers
     mock_aiohttp_response.method = "POST"
     mock_aiohttp_response.url = "http://example.com"
     mock_aiohttp_response.charset = "utf-8"
     mock_aiohttp_response.cookies = {}
-    mock_aiohttp_response.read = AsyncMock(return_value=b"test")
+    # Since Content-Encoding: gzip is present, content should be gzipped
+    mock_aiohttp_response.read = AsyncMock(return_value=gzip.compress(b"test"))
 
     mock_session = Mock(spec=aiohttp.ClientSession)
     mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
@@ -953,8 +952,8 @@ async def test_multiple_duplicate_headers_preserved():
     # Test httpx response
     httpx_result = await transport.post("http://example.com", "test", {})
 
-    # Content-Encoding should be removed
-    assert "content-encoding" not in httpx_result.headers
+    # Content-Encoding should be preserved now
+    assert httpx_result.headers["content-encoding"] == "gzip"
 
     # All Set-Cookie headers should be preserved
     set_cookie_values = httpx_result.headers.get_list("set-cookie")
