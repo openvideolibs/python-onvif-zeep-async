@@ -136,25 +136,24 @@ class AIOHTTPTransport(Transport):
             data = message
 
         try:
-            response = await self.session.post(
+            async with self.session.post(
                 address,
                 data=data,
                 headers=headers,
                 proxy=self.proxy,
                 timeout=self._client_timeout,
                 auto_decompress=False,  # Let zeep handle decompression
-            )
+            ) as response:
+                # Read the content to log it before checking status
+                content = await response.read()
+                _LOGGER.debug(
+                    "HTTP Response from %s (status: %d):\n%s",
+                    address,
+                    response.status,
+                    content,
+                )
 
-            # Read the content to log it before checking status
-            content = await response.read()
-            _LOGGER.debug(
-                "HTTP Response from %s (status: %d):\n%s",
-                address,
-                response.status,
-                content,
-            )
-
-            return response, content
+                return response, content
         except RuntimeError as exc:
             # Handle RuntimeError which may occur if the session is closed
             raise RuntimeError(f"Failed to post to {address}: {exc}") from exc
@@ -223,27 +222,26 @@ class AIOHTTPTransport(Transport):
         headers.setdefault("User-Agent", f"Zeep/{get_version()}")
 
         try:
-            response = await self.session.get(
+            async with self.session.get(
                 address,
                 params=params,
                 headers=headers,
                 proxy=self.proxy,
                 timeout=self._client_timeout,
                 auto_decompress=False,  # Let zeep handle decompression
-            )
+            ) as response:
+                # Read content and log before checking status
+                content = await response.read()
 
-            # Read content and log before checking status
-            content = await response.read()
+                _LOGGER.debug(
+                    "HTTP Response from %s (status: %d):\n%s",
+                    address,
+                    response.status,
+                    content,
+                )
 
-            _LOGGER.debug(
-                "HTTP Response from %s (status: %d):\n%s",
-                address,
-                response.status,
-                content,
-            )
-
-            # Convert directly to requests.Response
-            return self._aiohttp_to_requests_response(response, content)
+                # Convert directly to requests.Response
+                return self._aiohttp_to_requests_response(response, content)
         except RuntimeError as exc:
             # Handle RuntimeError which may occur if the session is closed
             raise RuntimeError(f"Failed to get from {address}: {exc}") from exc

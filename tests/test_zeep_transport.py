@@ -16,6 +16,10 @@ from requests import Response as RequestsResponse
 def create_mock_session(timeout=None):
     """Create a mock aiohttp session with optional timeout."""
     mock_session = Mock(spec=aiohttp.ClientSession)
+    # Set up post and get as Mock (not AsyncMock)
+    # They will return mock responses directly
+    mock_session.post = Mock()
+    mock_session.get = Mock()
     if timeout:
         mock_session.timeout = timeout
     else:
@@ -23,6 +27,30 @@ def create_mock_session(timeout=None):
         default_timeout = Mock(total=300, sock_read=None)
         mock_session.timeout = default_timeout
     return mock_session
+
+
+class AsyncContextManagerMock:
+    """Mock that implements async context manager protocol."""
+
+    def __init__(self, return_value):
+        self.return_value = return_value
+
+    async def __aenter__(self):
+        return self.return_value
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
+def create_capturing_mock(mock_response, capture_dict):
+    """Create a mock that captures arguments and returns an async context manager."""
+
+    def capture_and_return(*args, **kwargs):
+        capture_dict["args"] = args
+        capture_dict["kwargs"] = kwargs
+        return AsyncContextManagerMock(mock_response)
+
+    return Mock(side_effect=capture_and_return)
 
 
 @pytest.mark.asyncio
@@ -43,7 +71,9 @@ async def test_post_returns_httpx_response():
     mock_content = b"<response>test</response>"
     mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
 
-    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    # Make the response work as an async context manager
+
+    mock_session.post.return_value = AsyncContextManagerMock(mock_aiohttp_response)
 
     # Call post
     result = await transport.post(
@@ -76,8 +106,7 @@ async def test_post_xml_returns_requests_response():
 
     mock_content = b"<response>test</response>"
     mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
-
-    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post.return_value = AsyncContextManagerMock(mock_aiohttp_response)
 
     # Create XML envelope
     envelope = etree.Element("Envelope")
@@ -111,8 +140,7 @@ async def test_get_returns_requests_response():
 
     mock_content = b"<response>test</response>"
     mock_aiohttp_response.read = AsyncMock(return_value=mock_content)
-
-    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.get.return_value = AsyncContextManagerMock(mock_aiohttp_response)
 
     # Call get
     result = await transport.get(
@@ -181,7 +209,16 @@ async def test_timeout_handling():
 
     # Mock session that times out
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(side_effect=TimeoutError())
+
+    # Create a class that raises on __aenter__
+    class TimeoutContextManager:
+        async def __aenter__(self):
+            raise TimeoutError()
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    mock_session.post = Mock(return_value=TimeoutContextManager())
 
     transport.session = mock_session
 
@@ -199,7 +236,16 @@ async def test_connection_error_handling():
 
     # Mock session that fails
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(side_effect=aiohttp.ClientError("Connection failed"))
+
+    # Create a class that raises on __aenter__
+    class ErrorContextManager:
+        async def __aenter__(self):
+            raise aiohttp.ClientError("Connection failed")
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    mock_session.get = Mock(return_value=ErrorContextManager())
 
     transport.session = mock_session
 
@@ -250,7 +296,9 @@ async def test_post_with_bytes_message():
     mock_aiohttp_response.read = AsyncMock(return_value=b"<response/>")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post = Mock(
+        return_value=AsyncContextManagerMock(mock_aiohttp_response)
+    )
     transport.session = mock_session
 
     # Test with bytes message
@@ -277,7 +325,7 @@ async def test_get_with_none_params():
     mock_aiohttp_response.read = AsyncMock(return_value=b"<wsdl/>")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_aiohttp_response))
     transport.session = mock_session
 
     # Test without params/headers (should work with None)
@@ -303,15 +351,16 @@ async def test_user_agent_header():
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    post_mock = AsyncMock(return_value=mock_aiohttp_response)
-    mock_session.post = post_mock
+
+    # Capture the arguments while returning an async context manager
+    captured_args = {}
+    mock_session.post = create_capturing_mock(mock_aiohttp_response, captured_args)
     transport.session = mock_session
 
     await transport.post("http://example.com", "test", {})
 
     # Check User-Agent was set
-    call_args = post_mock.call_args
-    headers = call_args[1]["headers"]
+    headers = captured_args["kwargs"]["headers"]
     assert "User-Agent" in headers
     assert headers["User-Agent"].startswith("Zeep/")
 
@@ -334,15 +383,14 @@ async def test_custom_timeout_used():
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    post_mock = AsyncMock(return_value=mock_aiohttp_response)
-    mock_session.post = post_mock
+    captured_args = {}
+    mock_session.post = create_capturing_mock(mock_aiohttp_response, captured_args)
     transport.session = mock_session
 
     await transport.post("http://example.com", "test", {})
 
     # Check that custom timeout was used
-    call_args = post_mock.call_args
-    timeout = call_args[1]["timeout"]
+    timeout = captured_args["kwargs"]["timeout"]
     assert timeout is not None
     assert timeout == custom_timeout
 
@@ -364,15 +412,14 @@ async def test_proxy_parameter():
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    get_mock = AsyncMock(return_value=mock_aiohttp_response)
-    mock_session.get = get_mock
+    captured_args = {}
+    mock_session.get = create_capturing_mock(mock_aiohttp_response, captured_args)
     transport.session = mock_session
 
     await transport.get("http://example.com")
 
     # Check proxy was passed
-    call_args = get_mock.call_args
-    assert call_args[1]["proxy"] == "http://proxy:8080"
+    assert captured_args["kwargs"]["proxy"] == "http://proxy:8080"
 
 
 @pytest.mark.asyncio
@@ -411,7 +458,7 @@ async def test_response_encoding():
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_aiohttp_response))
     transport.session = mock_session
 
     result = await transport.get("http://example.com")
@@ -448,7 +495,9 @@ async def test_cookies_in_httpx_response():
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post = Mock(
+        return_value=AsyncContextManagerMock(mock_aiohttp_response)
+    )
     transport.session = mock_session
 
     # Test httpx response (from post)
@@ -476,7 +525,7 @@ async def test_cookies_in_requests_response():
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_aiohttp_response))
     transport.session = mock_session
 
     # Test requests response (from get)
@@ -517,8 +566,7 @@ async def test_session_reuse():
     mock_aiohttp_response.cookies = {}
     mock_aiohttp_response.raise_for_status = Mock()
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
-
-    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.get.return_value = AsyncContextManagerMock(mock_aiohttp_response)
 
     # Make multiple requests
     result1 = await transport.get("http://example.com")
@@ -572,15 +620,14 @@ async def test_content_type_header_default():
     mock_aiohttp_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    post_mock = AsyncMock(return_value=mock_aiohttp_response)
-    mock_session.post = post_mock
+    captured_args = {}
+    mock_session.post = create_capturing_mock(mock_aiohttp_response, captured_args)
     transport.session = mock_session
 
     await transport.post("http://example.com", "test", {})
 
     # Check Content-Type was set
-    call_args = post_mock.call_args
-    headers = call_args[1]["headers"]
+    headers = captured_args["kwargs"]["headers"]
     assert headers["Content-Type"] == 'text/xml; charset="utf-8"'
 
 
@@ -631,7 +678,7 @@ async def test_cookie_conversion_httpx_basic():
     mock_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_response)
+    mock_session.post = Mock(return_value=AsyncContextManagerMock(mock_response))
     transport.session = mock_session
 
     # Make request
@@ -667,7 +714,7 @@ async def test_cookie_conversion_requests_basic():
     mock_response.read = AsyncMock(return_value=b"test")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(return_value=mock_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_response))
     transport.session = mock_session
 
     # Make request
@@ -706,7 +753,7 @@ async def test_cookie_attributes_httpx():
     mock_response.read = AsyncMock(return_value=b"secure")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_response)
+    mock_session.post = Mock(return_value=AsyncContextManagerMock(mock_response))
     transport.session = mock_session
 
     # Make request
@@ -746,7 +793,7 @@ async def test_multiple_cookies():
     mock_response.read = AsyncMock(return_value=b"multi")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(return_value=mock_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_response))
     transport.session = mock_session
 
     # Make request
@@ -777,7 +824,7 @@ async def test_empty_cookies():
     mock_response.read = AsyncMock(return_value=b"nocookies")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(return_value=mock_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_response))
     transport.session = mock_session
 
     # Make request
@@ -808,7 +855,7 @@ async def test_cookie_encoding():
     mock_response.read = AsyncMock(return_value=b"encoded")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.get = AsyncMock(return_value=mock_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_response))
     transport.session = mock_session
 
     # Make request
@@ -842,7 +889,7 @@ async def test_cookie_jar_type():
     mock_response.read = AsyncMock(return_value=b"jar")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_response)
+    mock_session.post = Mock(return_value=AsyncContextManagerMock(mock_response))
     transport.session = mock_session
 
     # Test httpx response
@@ -850,7 +897,7 @@ async def test_cookie_jar_type():
     assert isinstance(httpx_result.cookies, httpx.Cookies)
 
     # Test requests response
-    mock_session.get = AsyncMock(return_value=mock_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_response))
     requests_result = await transport.get("http://example.com")
     # Verify cookies are accessible in requests response
     assert hasattr(requests_result.cookies, "__getitem__")
@@ -888,7 +935,9 @@ async def test_gzip_content_encoding_header_preserved():
     mock_aiohttp_response.read = AsyncMock(return_value=compressed_content)
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post = Mock(
+        return_value=AsyncContextManagerMock(mock_aiohttp_response)
+    )
     transport.session = mock_session
 
     # Test httpx response (from post)
@@ -905,7 +954,7 @@ async def test_gzip_content_encoding_header_preserved():
     assert httpx_result.read() == original_content
 
     # Test requests response (from get)
-    mock_session.get = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.get.return_value = AsyncContextManagerMock(mock_aiohttp_response)
     requests_result = await transport.get("http://camera.local/onvif/device_service")
 
     # Verify Content-Encoding header is preserved in requests response too
@@ -946,7 +995,9 @@ async def test_multiple_duplicate_headers_preserved():
     mock_aiohttp_response.read = AsyncMock(return_value=gzip.compress(b"test"))
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_aiohttp_response)
+    mock_session.post = Mock(
+        return_value=AsyncContextManagerMock(mock_aiohttp_response)
+    )
     transport.session = mock_session
 
     # Test httpx response
@@ -980,7 +1031,7 @@ async def test_http_error_responses_no_exception():
     mock_401_response.read = AsyncMock(return_value=b"<error>Unauthorized</error>")
 
     mock_session = Mock(spec=aiohttp.ClientSession)
-    mock_session.post = AsyncMock(return_value=mock_401_response)
+    mock_session.post = Mock(return_value=AsyncContextManagerMock(mock_401_response))
     transport.session = mock_session
 
     # Should not raise exception
@@ -997,7 +1048,7 @@ async def test_http_error_responses_no_exception():
     mock_500_response.cookies = {}
     mock_500_response.read = AsyncMock(return_value=b"<error>Server Error</error>")
 
-    mock_session.get = AsyncMock(return_value=mock_500_response)
+    mock_session.get = Mock(return_value=AsyncContextManagerMock(mock_500_response))
 
     # Should not raise exception
     result = await transport.get("http://example.com/wsdl")
