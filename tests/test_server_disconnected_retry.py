@@ -292,7 +292,7 @@ async def test_post_xml_without_retry_decorator_fails() -> None:
     """Test that without the retry decorator on post_xml, ServerDisconnectedError propagates."""
 
     # Create a mock session
-    mock_session: Mock = Mock(spec=ClientSession)
+    mock_session = Mock(spec=ClientSession)
     mock_session.timeout = Mock(total=30, sock_read=10)
 
     # Create the base transport (without retry decorator)
@@ -318,7 +318,7 @@ async def test_post_xml_without_retry_decorator_fails() -> None:
 
 
 @pytest.mark.asyncio
-async def test_post_xml_with_retry_decorator_succeeds():
+async def test_post_xml_with_retry_decorator_succeeds() -> None:
     """Test that with the retry decorator on post_xml, ServerDisconnectedError is retried."""
 
     # Create a mock session
@@ -360,7 +360,7 @@ async def test_post_xml_with_retry_decorator_succeeds():
 
 
 @pytest.mark.asyncio
-async def test_post_xml_decorator_is_applied():
+async def test_post_xml_decorator_is_applied() -> None:
     """Verify that the post_xml method has the retry decorator applied."""
 
     # Check that AsyncTransportProtocolErrorHandler.post_xml has the decorator
@@ -401,7 +401,7 @@ async def test_post_xml_decorator_is_applied():
 
 
 @pytest.mark.asyncio
-async def test_retry_only_for_server_disconnected():
+async def test_retry_only_for_server_disconnected() -> None:
     """Test that retry only happens for ServerDisconnectedError, not other exceptions."""
 
     mock_session = Mock(spec=ClientSession)
@@ -420,9 +420,8 @@ async def test_retry_only_for_server_disconnected():
             side_effect=aiohttp.ClientError("Different error")
         )
 
-        with pytest.raises(aiohttp.ClientError) as exc_info:
+        with pytest.raises(aiohttp.ClientError, match="Different error"):
             await transport.post_xml("http://example.com/onvif", mock_envelope, {})
 
-        assert str(exc_info.value) == "Different error"
         # Should only be called once (no retry for other errors)
         assert mock_session.post.call_count == 1
