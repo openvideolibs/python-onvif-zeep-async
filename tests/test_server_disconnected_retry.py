@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-
+import inspect
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, Mock, patch
+
+import aiohttp
 import pytest
 import pytest_asyncio
-import aiohttp
-from aiohttp import web, ClientSession
+from aiohttp import ClientSession, web
 from lxml import etree
+
 from onvif.client import AsyncTransportProtocolErrorHandler
 from onvif.zeep_aiohttp import AIOHTTPTransport
 
@@ -364,7 +366,6 @@ async def test_post_xml_decorator_is_applied() -> None:
     """Verify that the post_xml method has the retry decorator applied."""
 
     # Check that AsyncTransportProtocolErrorHandler.post_xml has the decorator
-    import inspect
 
     # The decorated function will have been wrapped
     # Check if the function has the expected decorator behavior
