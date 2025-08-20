@@ -282,9 +282,3 @@ async def test_no_retry_with_proper_connection_close(
 
         # Should be exactly 3 requests (no retries)
         assert server.request_count == 3
-
-
-if __name__ == "__main__":
-    print(
-        "Tests should be run with pytest: pytest tests/test_server_disconnected_retry.py"
-    )
