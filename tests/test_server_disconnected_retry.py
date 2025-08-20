@@ -390,18 +390,17 @@ async def test_post_xml_decorator_is_applied(mock_etree_to_string: MagicMock) ->
     mock_envelope = Mock()
     mock_envelope.tag = "TestEnvelope"
 
-    with patch("onvif.zeep_aiohttp.etree_to_string", return_value=b"<test/>"):
-        # Set up to fail twice (max retries)
-        mock_session.post = AsyncMock(
-            side_effect=aiohttp.ServerDisconnectedError("Server disconnected")
-        )
+    # Set up to fail twice (max retries)
+    mock_session.post = AsyncMock(
+        side_effect=aiohttp.ServerDisconnectedError("Server disconnected")
+    )
 
-        # Should raise after 2 attempts
-        with pytest.raises(aiohttp.ServerDisconnectedError):
-            await transport.post_xml("http://example.com/onvif", mock_envelope, {})
+    # Should raise after 2 attempts
+    with pytest.raises(aiohttp.ServerDisconnectedError):
+        await transport.post_xml("http://example.com/onvif", mock_envelope, {})
 
-        # Verify it was called exactly twice (2 attempts as configured)
-        assert mock_session.post.call_count == 2
+    # Verify it was called exactly twice (2 attempts as configured)
+    assert mock_session.post.call_count == 2
 
 
 @pytest.mark.asyncio
