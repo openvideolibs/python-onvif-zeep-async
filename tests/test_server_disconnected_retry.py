@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, Mock, patch
+from collections.abc import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import aiohttp
 import pytest
@@ -15,6 +15,13 @@ from lxml import etree
 
 from onvif.client import AsyncTransportProtocolErrorHandler
 from onvif.zeep_aiohttp import AIOHTTPTransport
+
+
+@pytest.fixture
+def mock_etree_to_string() -> Generator[MagicMock]:
+    """Mock etree_to_string to return test XML."""
+    with patch("onvif.zeep_aiohttp.etree_to_string", return_value=b"<test/>") as mock:
+        yield mock
 
 
 class DisconnectingHTTPProtocol(asyncio.Protocol):
@@ -290,7 +297,7 @@ async def test_no_retry_with_proper_connection_close(
 
 
 @pytest.mark.asyncio
-async def test_post_xml_without_retry_decorator_fails() -> None:
+async def test_post_xml_without_retry_decorator_fails(mock_etree_to_string) -> None:
     """Test that without the retry decorator on post_xml, ServerDisconnectedError propagates."""
 
     # Create a mock session
@@ -304,23 +311,21 @@ async def test_post_xml_without_retry_decorator_fails() -> None:
     mock_envelope = Mock()
     mock_envelope.tag = "TestEnvelope"
 
-    # Mock etree_to_string
-    with patch("onvif.zeep_aiohttp.etree_to_string", return_value=b"<test/>"):
-        # Make session.post raise ServerDisconnectedError
-        mock_session.post = AsyncMock(
-            side_effect=aiohttp.ServerDisconnectedError("Server disconnected")
-        )
+    # Make session.post raise ServerDisconnectedError
+    mock_session.post = AsyncMock(
+        side_effect=aiohttp.ServerDisconnectedError("Server disconnected")
+    )
 
-        # This should raise ServerDisconnectedError without retry
-        with pytest.raises(aiohttp.ServerDisconnectedError):
-            await transport.post_xml("http://example.com/onvif", mock_envelope, {})
+    # This should raise ServerDisconnectedError without retry
+    with pytest.raises(aiohttp.ServerDisconnectedError):
+        await transport.post_xml("http://example.com/onvif", mock_envelope, {})
 
-        # Should only be called once (no retry)
-        assert mock_session.post.call_count == 1
+    # Should only be called once (no retry)
+    assert mock_session.post.call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_post_xml_with_retry_decorator_succeeds() -> None:
+async def test_post_xml_with_retry_decorator_succeeds(mock_etree_to_string) -> None:
     """Test that with the retry decorator on post_xml, ServerDisconnectedError is retried."""
 
     # Create a mock session
@@ -336,29 +341,27 @@ async def test_post_xml_with_retry_decorator_succeeds() -> None:
     mock_envelope = Mock()
     mock_envelope.tag = "TestEnvelope"
 
-    # Mock etree_to_string
-    with patch("onvif.zeep_aiohttp.etree_to_string", return_value=b"<test/>"):
-        # First call fails, second succeeds
-        mock_response = Mock()
-        mock_response.status = 200
-        mock_response.headers = {}
-        mock_response.cookies = {}
-        mock_response.charset = "utf-8"
-        mock_response.read = AsyncMock(return_value=b"<response/>")
+    # First call fails, second succeeds
+    mock_response = Mock()
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.cookies = {}
+    mock_response.charset = "utf-8"
+    mock_response.read = AsyncMock(return_value=b"<response/>")
 
-        mock_session.post = AsyncMock(
-            side_effect=[
-                aiohttp.ServerDisconnectedError("Server disconnected"),
-                mock_response,
-            ]
-        )
+    mock_session.post = AsyncMock(
+        side_effect=[
+            aiohttp.ServerDisconnectedError("Server disconnected"),
+            mock_response,
+        ]
+    )
 
-        # This should succeed after retry
-        result = await transport.post_xml("http://example.com/onvif", mock_envelope, {})
+    # This should succeed after retry
+    result = await transport.post_xml("http://example.com/onvif", mock_envelope, {})
 
-        # Should be called twice (initial + retry)
-        assert mock_session.post.call_count == 2
-        assert result.status_code == 200
+    # Should be called twice (initial + retry)
+    assert mock_session.post.call_count == 2
+    assert result.status_code == 200
 
 
 @pytest.mark.asyncio
