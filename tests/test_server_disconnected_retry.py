@@ -365,7 +365,7 @@ async def test_post_xml_with_retry_decorator_succeeds(mock_etree_to_string) -> N
 
 
 @pytest.mark.asyncio
-async def test_post_xml_decorator_is_applied() -> None:
+async def test_post_xml_decorator_is_applied(mock_etree_to_string: MagicMock) -> None:
     """Verify that the post_xml method has the retry decorator applied."""
 
     # Check that AsyncTransportProtocolErrorHandler.post_xml has the decorator
