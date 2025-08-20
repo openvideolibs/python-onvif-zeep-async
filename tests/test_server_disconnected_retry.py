@@ -297,9 +297,8 @@ async def test_no_retry_with_proper_connection_close(
 
 
 @pytest.mark.asyncio
-async def test_post_xml_without_retry_decorator_fails(
-    mock_etree_to_string: MagicMock,
-) -> None:
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_post_xml_without_retry_decorator_fails() -> None:
     """Test that without the retry decorator on post_xml, ServerDisconnectedError propagates."""
 
     # Create a mock session
@@ -327,9 +326,8 @@ async def test_post_xml_without_retry_decorator_fails(
 
 
 @pytest.mark.asyncio
-async def test_post_xml_with_retry_decorator_succeeds(
-    mock_etree_to_string: MagicMock,
-) -> None:
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_post_xml_with_retry_decorator_succeeds() -> None:
     """Test that with the retry decorator on post_xml, ServerDisconnectedError is retried."""
 
     # Create a mock session
@@ -369,7 +367,8 @@ async def test_post_xml_with_retry_decorator_succeeds(
 
 
 @pytest.mark.asyncio
-async def test_post_xml_decorator_is_applied(mock_etree_to_string: MagicMock) -> None:
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_post_xml_decorator_is_applied() -> None:
     """Verify that the post_xml method has the retry decorator applied."""
 
     # Check that AsyncTransportProtocolErrorHandler.post_xml has the decorator
@@ -408,9 +407,8 @@ async def test_post_xml_decorator_is_applied(mock_etree_to_string: MagicMock) ->
 
 
 @pytest.mark.asyncio
-async def test_retry_only_for_server_disconnected(
-    mock_etree_to_string: MagicMock,
-) -> None:
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_retry_only_for_server_disconnected() -> None:
     """Test that retry only happens for ServerDisconnectedError, not other exceptions."""
 
     mock_session = Mock(spec=ClientSession)
@@ -431,3 +429,125 @@ async def test_retry_only_for_server_disconnected(
 
     # Should only be called once (no retry for other errors)
     assert mock_session.post.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_post_with_retry_decorator_succeeds() -> None:
+    """Test that with the retry decorator on post, ServerDisconnectedError is retried."""
+
+    # Create a mock session
+    mock_session = Mock(spec=ClientSession)
+    mock_session.timeout = Mock(total=30, sock_read=10)
+
+    # Create the transport with retry decorator
+    transport = AsyncTransportProtocolErrorHandler(
+        session=mock_session, verify_ssl=False
+    )
+
+    # First call fails, second succeeds
+    mock_response = Mock()
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.cookies = {}
+    mock_response.charset = "utf-8"
+    mock_response.read = AsyncMock(return_value=b"<response/>")
+
+    mock_session.post = AsyncMock(
+        side_effect=[
+            aiohttp.ServerDisconnectedError("Server disconnected"),
+            mock_response,
+        ]
+    )
+
+    # This should succeed after retry
+    result = await transport.post("http://example.com/onvif", "<test/>", {})
+
+    # Should be called twice (initial + retry)
+    assert mock_session.post.call_count == 2
+    assert result.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_with_retry_decorator_succeeds() -> None:
+    """Test that with the retry decorator on get, ServerDisconnectedError is retried."""
+
+    # Create a mock session
+    mock_session = Mock(spec=ClientSession)
+    mock_session.timeout = Mock(total=30, sock_read=10)
+
+    # Create the transport with retry decorator
+    transport = AsyncTransportProtocolErrorHandler(
+        session=mock_session, verify_ssl=False
+    )
+
+    # First call fails, second succeeds
+    mock_response = Mock()
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.cookies = {}
+    mock_response.charset = "utf-8"
+    mock_response.read = AsyncMock(return_value=b"<response/>")
+
+    mock_session.get = AsyncMock(
+        side_effect=[
+            aiohttp.ServerDisconnectedError("Server disconnected"),
+            mock_response,
+        ]
+    )
+
+    # This should succeed after retry
+    result = await transport.get("http://example.com/onvif")
+
+    # Should be called twice (initial + retry)
+    assert mock_session.get.call_count == 2
+    assert result.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_post_without_retry_decorator_fails() -> None:
+    """Test that without the retry decorator on post, ServerDisconnectedError propagates."""
+
+    # Create a mock session
+    mock_session = Mock(spec=ClientSession)
+    mock_session.timeout = Mock(total=30, sock_read=10)
+
+    # Create the base transport (without retry decorator)
+    transport = AIOHTTPTransport(session=mock_session, verify_ssl=False)
+
+    # Make session.post raise ServerDisconnectedError
+    mock_session.post = AsyncMock(
+        side_effect=aiohttp.ServerDisconnectedError("Server disconnected")
+    )
+
+    # This should raise ServerDisconnectedError without retry
+    with pytest.raises(aiohttp.ServerDisconnectedError):
+        await transport.post("http://example.com/onvif", "<test/>", {})
+
+    # Should only be called once (no retry)
+    assert mock_session.post.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_get_without_retry_decorator_fails() -> None:
+    """Test that without the retry decorator on get, ServerDisconnectedError propagates."""
+
+    # Create a mock session
+    mock_session = Mock(spec=ClientSession)
+    mock_session.timeout = Mock(total=30, sock_read=10)
+
+    # Create the base transport (without retry decorator)
+    transport = AIOHTTPTransport(session=mock_session, verify_ssl=False)
+
+    # Make session.get raise ServerDisconnectedError
+    mock_session.get = AsyncMock(
+        side_effect=aiohttp.ServerDisconnectedError("Server disconnected")
+    )
+
+    # This should raise ServerDisconnectedError without retry
+    with pytest.raises(aiohttp.ServerDisconnectedError):
+        await transport.get("http://example.com/onvif")
+
+    # Should only be called once (no retry)
+    assert mock_session.get.call_count == 1
