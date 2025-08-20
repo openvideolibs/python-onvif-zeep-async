@@ -114,13 +114,17 @@ class AsyncTransportProtocolErrorHandler(AIOHTTPTransport):
     # once since
     """
 
-    @retry_connection_error(attempts=2, exception=aiohttp.ServerDisconnectedError)
+    @retry_connection_error(
+        attempts=2, exception=aiohttp.ServerDisconnectedError, backoff=0
+    )
     async def post(
         self, address: str, message: str, headers: dict[str, str]
     ) -> httpx.Response:
         return await super().post(address, message, headers)
 
-    @retry_connection_error(attempts=2, exception=aiohttp.ServerDisconnectedError)
+    @retry_connection_error(
+        attempts=2, exception=aiohttp.ServerDisconnectedError, backoff=0
+    )
     async def get(
         self,
         address: str,
@@ -128,6 +132,14 @@ class AsyncTransportProtocolErrorHandler(AIOHTTPTransport):
         headers: dict[str, str] | None = None,
     ) -> Response:
         return await super().get(address, params, headers)
+
+    @retry_connection_error(
+        attempts=2, exception=aiohttp.ServerDisconnectedError, backoff=0
+    )
+    async def post_xml(
+        self, address: str, envelope: Any, headers: dict[str, str]
+    ) -> Response:
+        return await super().post_xml(address, envelope, headers)
 
 
 async def _cached_document(url: str) -> Document:
