@@ -297,7 +297,9 @@ async def test_no_retry_with_proper_connection_close(
 
 
 @pytest.mark.asyncio
-async def test_post_xml_without_retry_decorator_fails(mock_etree_to_string) -> None:
+async def test_post_xml_without_retry_decorator_fails(
+    mock_etree_to_string: MagicMock,
+) -> None:
     """Test that without the retry decorator on post_xml, ServerDisconnectedError propagates."""
 
     # Create a mock session
@@ -325,7 +327,9 @@ async def test_post_xml_without_retry_decorator_fails(mock_etree_to_string) -> N
 
 
 @pytest.mark.asyncio
-async def test_post_xml_with_retry_decorator_succeeds(mock_etree_to_string) -> None:
+async def test_post_xml_with_retry_decorator_succeeds(
+    mock_etree_to_string: MagicMock,
+) -> None:
     """Test that with the retry decorator on post_xml, ServerDisconnectedError is retried."""
 
     # Create a mock session
@@ -404,7 +408,9 @@ async def test_post_xml_decorator_is_applied(mock_etree_to_string: MagicMock) ->
 
 
 @pytest.mark.asyncio
-async def test_retry_only_for_server_disconnected() -> None:
+async def test_retry_only_for_server_disconnected(
+    mock_etree_to_string: MagicMock,
+) -> None:
     """Test that retry only happens for ServerDisconnectedError, not other exceptions."""
 
     mock_session = Mock(spec=ClientSession)
@@ -417,14 +423,11 @@ async def test_retry_only_for_server_disconnected() -> None:
     mock_envelope = Mock()
     mock_envelope.tag = "TestEnvelope"
 
-    with patch("onvif.zeep_aiohttp.etree_to_string", return_value=b"<test/>"):
-        # Different error type should not retry
-        mock_session.post = AsyncMock(
-            side_effect=aiohttp.ClientError("Different error")
-        )
+    # Different error type should not retry
+    mock_session.post = AsyncMock(side_effect=aiohttp.ClientError("Different error"))
 
-        with pytest.raises(aiohttp.ClientError, match="Different error"):
-            await transport.post_xml("http://example.com/onvif", mock_envelope, {})
+    with pytest.raises(aiohttp.ClientError, match="Different error"):
+        await transport.post_xml("http://example.com/onvif", mock_envelope, {})
 
-        # Should only be called once (no retry for other errors)
-        assert mock_session.post.call_count == 1
+    # Should only be called once (no retry for other errors)
+    assert mock_session.post.call_count == 1
