@@ -5,21 +5,28 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+
 from abc import abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+
+from lxml.etree import XPath, XPathSyntaxError
+from zeep.client import Client
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
 from zeep.wsdl.bindings.soap import SoapOperation
+from zeep.xsd import Element, AnyObject
 
 import aiohttp
 from onvif.exceptions import ONVIFError
 
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
+from .types import TopicExpression
 from .util import normalize_url, stringify_onvif_error
 from .wrappers import retry_connection_error
+
 
 logger = logging.getLogger("onvif")
 
@@ -34,6 +41,7 @@ SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 # this value, we will use this value instead to prevent subscribing over and over
 # again.
 MINIMUM_SUBSCRIPTION_SECONDS = 60.0
+MINIMUM_SUBSCRIPTION_INTERVAL = dt.timedelta(seconds=MINIMUM_SUBSCRIPTION_SECONDS)
 
 if TYPE_CHECKING:
     from onvif.client import ONVIFCamera, ONVIFService
@@ -50,7 +58,7 @@ class BaseManager:
     ) -> None:
         """Initialize the notification processor."""
         self._device = device
-        self._interval = interval
+        self._interval = interval if interval <= MINIMUM_SUBSCRIPTION_INTERVAL else MINIMUM_SUBSCRIPTION_INTERVAL
         self._subscription: ONVIFService | None = None
         self._restart_or_renew_task: asyncio.Task | None = None
         self._loop = asyncio.get_event_loop()
@@ -290,6 +298,33 @@ class NotificationManager(BaseManager):
 class PullPointManager(BaseManager):
     """Manager for PullPoint."""
 
+    def __init__(
+            self,
+            device: ONVIFCamera,
+            interval: dt.timedelta,
+            subscription_lost_callback: Callable[[], None],
+            topic_filter: TopicExpression | None = None,
+    ) -> None:
+        """
+        Create a Manager for PullPoint
+        :param device: ONVIFCamera
+        :param interval: Controls the termination time of the PullPoint session. Minimum value is 60s
+        :param subscription_lost_callback: Called when a subscroption is lost and cannot be re-established
+        :param topic_filter: An optional XPATH used to control the topics the subscription will listen to.
+
+        :raises XPathSyntaxError: If an invalid, non-None topic_filter is provided
+
+        Notes:
+            If your ONVIFCamera has a FixedTopicSet, you will likely not be able to use wildcards in your topic_filter
+
+        Examples:
+            >>> from datetime import timedelta
+            >>> PullPointManager(cam, timedelta(seconds=60), lambda: print("Lost connection!"), "tns1:RuleEngine/CellMotionDetector/Motion")
+
+        """
+        self._topic_filter: str | None = XPath(topic_filter).path if topic_filter else None
+        super().__init__(device, interval, subscription_lost_callback)
+
     async def _start(self) -> float:
         """
         Start the PullPoint manager.
@@ -299,14 +334,25 @@ class PullPointManager(BaseManager):
         device = self._device
         logger.debug("%s: Setup the PullPoint manager", device.host)
         events_service = await device.create_events_service()
-        result = await events_service.CreatePullPointSubscription(
-            {
-                "InitialTerminationTime": device.get_next_termination_time(
-                    self._interval
-                ),
+
+        subscription_params = {
+            "InitialTerminationTime": device.get_next_termination_time(
+                self._interval
+            ),
+        }
+        # Alternatively, filter could be accepted as an argument
+        # and we can expect the caller to create the TopicExpression
+        # this would allow them to control the dialect too?
+        if self._topic_filter:
+            subscription_params["Filter"] = {
+                "_value_1": TopicExpression.from_client(events_service.zeep_client, self._topic_filter),
             }
+
+        result = await events_service.CreatePullPointSubscription(
+            subscription_params
         )
         # pylint: disable=protected-access
+
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
         ] = normalize_url(result.SubscriptionReference.Address._value_1)
@@ -314,6 +360,7 @@ class PullPointManager(BaseManager):
         self._subscription = await device.create_subscription_service(
             "PullPointSubscription"
         )
+
         # Create the service that will be used to pull messages from the device.
         self._service = await device.create_pullpoint_service()
         if device.has_broken_relative_time(

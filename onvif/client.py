@@ -560,9 +560,10 @@ class ONVIFCamera:
         self,
         interval: dt.timedelta,
         subscription_lost_callback: Callable[[], None],
+        topic_filter: str | None = None,
     ) -> PullPointManager:
         """Create a pullpoint manager."""
-        manager = PullPointManager(self, interval, subscription_lost_callback)
+        manager = PullPointManager(self, interval, subscription_lost_callback, topic_filter)
         await manager.start()
         return manager
 
