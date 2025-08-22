@@ -10,12 +10,10 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 
-from lxml.etree import XPath, XPathSyntaxError
-from zeep.client import Client
+from lxml.etree import XPath
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
 from zeep.wsdl.bindings.soap import SoapOperation
-from zeep.xsd import Element, AnyObject
 
 import aiohttp
 from onvif.exceptions import ONVIFError
@@ -346,12 +344,10 @@ class PullPointManager(BaseManager):
             subscription_params["Filter"] = {
                 "_value_1": TopicExpression.from_client(events_service.zeep_client, self._topic_filter),
             }
-
         result = await events_service.CreatePullPointSubscription(
             subscription_params
         )
         # pylint: disable=protected-access
-
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
         ] = normalize_url(result.SubscriptionReference.Address._value_1)
@@ -359,7 +355,6 @@ class PullPointManager(BaseManager):
         self._subscription = await device.create_subscription_service(
             "PullPointSubscription"
         )
-
         # Create the service that will be used to pull messages from the device.
         self._service = await device.create_pullpoint_service()
         if device.has_broken_relative_time(
