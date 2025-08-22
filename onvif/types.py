@@ -110,11 +110,18 @@ class TopicExpression(AnyObject):
     NAMESPACE = "{http://docs.oasis-open.org/wsn/b-2}"
     DIALECT = "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet"
 
-    def __init__(self, topic_expression_type: ComplexType, value: str, dialect: str = DIALECT):
+    def __init__(
+        self, topic_expression_type: ComplexType, value: str, dialect: str = DIALECT
+    ):
         expression = Element(f"{self.NAMESPACE}TopicExpression", topic_expression_type)
-        super().__init__(expression, topic_expression_type(_value_1=value, Dialect=dialect))
-        
+        super().__init__(
+            expression, topic_expression_type(_value_1=value, Dialect=dialect)
+        )
+
     @classmethod
-    def from_client(cls, client: Client, expression: str, dialect: str = DIALECT) -> "TopicExpression":  
-        return cls(client.get_type(f"{cls.NAMESPACE}TopicExpressionType"), expression, dialect)
-        
+    def from_client(
+        cls, client: Client, expression: str, dialect: str = DIALECT
+    ) -> "TopicExpression":
+        return cls(
+            client.get_type(f"{cls.NAMESPACE}TopicExpressionType"), expression, dialect
+        )

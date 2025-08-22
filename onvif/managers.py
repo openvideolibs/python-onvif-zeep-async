@@ -10,12 +10,10 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 
-from lxml.etree import XPath, XPathSyntaxError
-from zeep.client import Client
+from lxml.etree import XPath
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
 from zeep.wsdl.bindings.soap import SoapOperation
-from zeep.xsd import Element, AnyObject
 
 import aiohttp
 from onvif.exceptions import ONVIFError
@@ -57,7 +55,11 @@ class BaseManager:
     ) -> None:
         """Initialize the notification processor."""
         self._device = device
-        self._interval = interval if interval <= MINIMUM_SUBSCRIPTION_INTERVAL else MINIMUM_SUBSCRIPTION_INTERVAL
+        self._interval = (
+            interval
+            if interval <= MINIMUM_SUBSCRIPTION_INTERVAL
+            else MINIMUM_SUBSCRIPTION_INTERVAL
+        )
         self._subscription: ONVIFService | None = None
         self._restart_or_renew_task: asyncio.Task | None = None
         self._loop = asyncio.get_event_loop()
@@ -298,11 +300,11 @@ class PullPointManager(BaseManager):
     """Manager for PullPoint."""
 
     def __init__(
-            self,
-            device: ONVIFCamera,
-            interval: dt.timedelta,
-            subscription_lost_callback: Callable[[], None],
-            topic_filter: TopicExpression | None = None,
+        self,
+        device: ONVIFCamera,
+        interval: dt.timedelta,
+        subscription_lost_callback: Callable[[], None],
+        topic_filter: TopicExpression | None = None,
     ) -> None:
         """
         Create a Manager for PullPoint
@@ -321,7 +323,9 @@ class PullPointManager(BaseManager):
             >>> PullPointManager(cam, timedelta(seconds=60), lambda: print("Lost connection!"), "tns1:RuleEngine/CellMotionDetector/Motion")
 
         """
-        self._topic_filter: str | None = XPath(topic_filter).path if topic_filter else None
+        self._topic_filter: str | None = (
+            XPath(topic_filter).path if topic_filter else None
+        )
         super().__init__(device, interval, subscription_lost_callback)
 
     async def _start(self) -> float:
@@ -335,21 +339,19 @@ class PullPointManager(BaseManager):
         events_service = await device.create_events_service()
 
         subscription_params = {
-            "InitialTerminationTime": device.get_next_termination_time(
-                self._interval
-            ),
+            "InitialTerminationTime": device.get_next_termination_time(self._interval),
         }
         # Alternatively, filter could be accepted as an argument
         # and we can expect the caller to create the TopicExpression
         # this would allow them to control the dialect too?
         if self._topic_filter:
             subscription_params["Filter"] = {
-                "_value_1": TopicExpression.from_client(events_service.zeep_client, self._topic_filter),
+                "_value_1": TopicExpression.from_client(
+                    events_service.zeep_client, self._topic_filter
+                ),
             }
 
-        result = await events_service.CreatePullPointSubscription(
-            subscription_params
-        )
+        result = await events_service.CreatePullPointSubscription(subscription_params)
         # pylint: disable=protected-access
 
         device.xaddrs[

@@ -563,7 +563,9 @@ class ONVIFCamera:
         topic_filter: str | None = None,
     ) -> PullPointManager:
         """Create a pullpoint manager."""
-        manager = PullPointManager(self, interval, subscription_lost_callback, topic_filter)
+        manager = PullPointManager(
+            self, interval, subscription_lost_callback, topic_filter
+        )
         await manager.start()
         return manager
 
