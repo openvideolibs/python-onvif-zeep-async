@@ -4,7 +4,7 @@
 # Dev
 pytest==8.4.1
 pytest-cov==7.0.0
-pytest-asyncio==1.1.0
+pytest-asyncio==1.2.0
 covdefaults==2.3.0
 aioresponses==0.7.8
 
