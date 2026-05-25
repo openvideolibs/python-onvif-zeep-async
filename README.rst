@@ -1,6 +1,10 @@
 python-onvif-zeep-async
 =======================
 
+.. image:: https://codecov.io/gh/openvideolibs/python-onvif-zeep-async/branch/async/graph/badge.svg
+    :target: https://codecov.io/gh/openvideolibs/python-onvif-zeep-async
+    :alt: codecov
+
 ONVIF Client Implementation in Python 3
 
 Documentation
