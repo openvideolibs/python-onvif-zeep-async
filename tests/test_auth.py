@@ -9,8 +9,12 @@ from lxml import etree
 
 from onvif.client import UsernameDigestTokenDtDiff
 
-WSSE_NS = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
-WSU_NS = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"
+WSSE_NS = (
+    "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
+)
+WSU_NS = (
+    "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"
+)
 DIGEST_TYPE = (
     "http://docs.oasis-open.org/wss/2004/01/"
     "oasis-200401-wss-username-token-profile-1.0#PasswordDigest"
