@@ -466,24 +466,19 @@ class ONVIFCamera:
         if self._capabilities is None:
             # update_xaddrs() prefers GetServices, which does not return the
             # Category-keyed capabilities structure, so fetch GetCapabilities
-            # here on demand to populate self._capabilities.
-            devicemgmt = await self.create_devicemgmt_service()
-            if self.dt_diff is None:
-                # update_xaddrs() may not have run yet, so reproduce its
-                # adjust_time clock-skew compensation here. Otherwise a caller
-                # invoking get_capabilities() before update_xaddrs() on a
-                # clock-skewed camera would sign GetCapabilities with an
-                # un-adjusted timestamp and fail authentication. A no-op when
-                # adjust_time is disabled.
-                devicemgmt = await self._adjust_time(devicemgmt)
+            # here on demand to populate self._capabilities. _devicemgmt_with_time()
+            # reproduces the adjust_time clock-skew compensation update_xaddrs()
+            # performs, so a caller invoking get_capabilities() first on a
+            # clock-skewed camera still signs GetCapabilities with an adjusted
+            # timestamp.
+            devicemgmt = await self._devicemgmt_with_time()
             await self._update_xaddrs_from_capabilities(devicemgmt)
         return self._capabilities
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
         self.dt_diff = None
-        devicemgmt = await self.create_devicemgmt_service()
-        devicemgmt = await self._adjust_time(devicemgmt)
+        devicemgmt = await self._devicemgmt_with_time()
 
         # Get XAddr of services on the device.
         #
@@ -500,6 +495,23 @@ class ONVIFCamera:
         if not await self._update_xaddrs_from_services(devicemgmt):
             await self._update_xaddrs_from_capabilities(devicemgmt)
 
+    async def _devicemgmt_with_time(self) -> ONVIFService:
+        """Create the devicemgmt service with clock-skew compensation applied.
+
+        Shared prologue for ``update_xaddrs()`` and ``get_capabilities()``: both
+        need a devicemgmt service whose WS-Security timestamps account for the
+        device clock offset. The ``adjust_time`` handshake runs only when
+        ``dt_diff`` has not been computed yet, so calling this from
+        ``get_capabilities()`` after ``update_xaddrs()`` does not repeat the
+        round-trip. ``update_xaddrs()`` resets ``dt_diff`` to ``None`` first, so
+        it always (re)runs the handshake. A no-op when ``adjust_time`` is
+        disabled. Returns the devicemgmt service the caller should continue to use.
+        """
+        devicemgmt = await self.create_devicemgmt_service()
+        if self.dt_diff is None:
+            devicemgmt = await self._adjust_time(devicemgmt)
+        return devicemgmt
+
     async def _adjust_time(self, devicemgmt: ONVIFService) -> ONVIFService:
         """Compute the device clock offset and recreate the devicemgmt service.
 
@@ -510,9 +522,10 @@ class ONVIFCamera:
         devicemgmt service is recreated afterwards so it is rebuilt with the
         freshly computed ``dt_diff``. A no-op when ``adjust_time`` is disabled.
 
-        Both ``update_xaddrs()`` and ``get_capabilities()`` call this so the
-        clock-skew handshake happens regardless of which one runs first.
-        Returns the devicemgmt service the caller should continue to use.
+        Called via ``_devicemgmt_with_time()`` so the clock-skew handshake
+        happens regardless of whether ``update_xaddrs()`` or
+        ``get_capabilities()`` runs first. Returns the devicemgmt service the
+        caller should continue to use.
         """
         if not self.adjust_time:
             return devicemgmt

@@ -201,6 +201,44 @@ async def test_get_capabilities_adjusts_time_when_called_before_update_xaddrs() 
 
 
 @pytest.mark.asyncio
+async def test_get_capabilities_reuses_dt_diff_from_update_xaddrs() -> None:
+    """get_capabilities reuses the offset update_xaddrs computed.
+
+    The shared _devicemgmt_with_time() prologue runs the adjust_time handshake
+    only when dt_diff is unset. Once update_xaddrs() has populated dt_diff, a
+    later get_capabilities() must not repeat the GetSystemDateAndTime
+    round-trip.
+    """
+    camera = FakeHikvisionCamera()
+    # Skew the device clock so the handshake computes a non-zero dt_diff.
+    camera.utc_year = 2020
+    await camera.start()
+    cam = ONVIFCamera(
+        camera.host,
+        camera.port,
+        "admin",
+        "Password1",
+        wsdl_dir=WSDL_DIR,
+        no_cache=True,
+        adjust_time=True,
+    )
+    try:
+        await cam.update_xaddrs()
+        assert cam.dt_diff is not None
+        # update_xaddrs ran the handshake exactly once.
+        assert camera.operations().count("GetSystemDateAndTime") == 1
+
+        capabilities = await cam.get_capabilities()
+
+        # dt_diff was already set, so the handshake is not repeated.
+        assert camera.operations().count("GetSystemDateAndTime") == 1
+        assert capabilities["Media"]["XAddr"].endswith("/onvif/Media")
+    finally:
+        await cam.close()
+        await camera.stop()
+
+
+@pytest.mark.asyncio
 async def test_get_system_date_and_time(
     fake_camera: FakeHikvisionCamera, onvif_camera: ONVIFCamera
 ) -> None:
