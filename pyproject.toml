@@ -14,6 +14,7 @@ extend-select = [
   "DTZ", # flake8-datetimez
   "EM", # flake8-errmsg
   "I", # isort
+  "SIM", # flake8-simplify
   "TC", # flake8-type-checking
 ]
 

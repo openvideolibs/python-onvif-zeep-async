@@ -142,10 +142,7 @@ class AIOHTTPTransport(Transport):
         headers.setdefault("Content-Type", 'text/xml; charset="utf-8"')
 
         # Handle both str and bytes
-        if isinstance(message, str):
-            data = message.encode("utf-8")
-        else:
-            data = message
+        data = message.encode("utf-8") if isinstance(message, str) else message
 
         try:
             response = await self.session.post(

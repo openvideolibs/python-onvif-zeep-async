@@ -541,18 +541,20 @@ def test_sync_load_creates_new_loop():
     mock_response.content = b"<wsdl/>"
 
     # This should work even if there's already an event loop
-    with patch.object(transport, "get", new=AsyncMock(return_value=mock_response)):
-        with patch("asyncio.new_event_loop") as mock_new_loop:
-            mock_loop = Mock()
-            mock_loop.run_until_complete.return_value = mock_response
-            mock_new_loop.return_value = mock_loop
+    with (
+        patch.object(transport, "get", new=AsyncMock(return_value=mock_response)),
+        patch("asyncio.new_event_loop") as mock_new_loop,
+    ):
+        mock_loop = Mock()
+        mock_loop.run_until_complete.return_value = mock_response
+        mock_new_loop.return_value = mock_loop
 
-            result = transport.load("http://example.com/wsdl")
+        result = transport.load("http://example.com/wsdl")
 
-            # Should have created new loop
-            mock_new_loop.assert_called_once()
-            mock_loop.close.assert_called_once()
-            assert result == b"<wsdl/>"
+        # Should have created new loop
+        mock_new_loop.assert_called_once()
+        mock_loop.close.assert_called_once()
+        assert result == b"<wsdl/>"
 
 
 @pytest.mark.asyncio

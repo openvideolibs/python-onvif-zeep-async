@@ -6,7 +6,10 @@ from setuptools import find_packages, setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 version_path = os.path.join(here, "onvif/version.txt")
-version = open(version_path).read().strip()
+with open(version_path) as version_file:
+    version = version_file.read().strip()
+with open("README.rst") as readme_file:
+    long_description = readme_file.read()
 
 requires = [
     "aiohttp>=3.12.9",
@@ -41,7 +44,7 @@ setup(
     name="onvif-zeep-async",
     version=version,
     description="Async Python Client for ONVIF Camera",
-    long_description=open("README.rst").read(),
+    long_description=long_description,
     author="Cherish Chen",
     author_email="sinchb128@gmail.com",
     maintainer="sinchb",
