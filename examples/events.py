@@ -78,23 +78,18 @@ async def run(args):
         # and many close idle connections between polls, which surfaces as
         # aiohttp.ServerDisconnectedError.
         #
-        # The library retries a transient disconnect automatically, but a poll
-        # loop should still guard against it: the disconnect is harmless, so
-        # just issue another PullMessages on the same subscription. There is no
-        # need to recreate the pullpoint manager.
-        deadline = asyncio.get_event_loop().time() + WAIT_TIME.total_seconds()
-        while asyncio.get_event_loop().time() < deadline:
-            try:
-                messages = await pullpoint.PullMessages(
-                    {
-                        "MessageLimit": 100,
-                        "Timeout": WAIT_TIME,
-                    }
-                )
-            except aiohttp.ServerDisconnectedError:
-                print("server disconnected, re-pulling...")
-                continue
-            print(messages)
+        # The library retries a transient disconnect automatically. Per the
+        # HTTP/1.1 spec a disconnected idempotent request should be retried at
+        # most once, so if the error still bubbles up, re-issue PullMessages a
+        # single time on the same subscription. There is no need to recreate
+        # the pullpoint manager.
+        pull = {"MessageLimit": 100, "Timeout": WAIT_TIME}
+        try:
+            messages = await pullpoint.PullMessages(pull)
+        except aiohttp.ServerDisconnectedError:
+            print("server disconnected, re-pulling once...")
+            messages = await pullpoint.PullMessages(pull)
+        print(messages)
 
         await manager.shutdown()
 
