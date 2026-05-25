@@ -217,7 +217,8 @@ async def test_update_xaddrs_survives_unserializable_capabilities(
 
     class _Unserializable(dict):
         def __iter__(self):
-            raise ValueError("cannot serialize")
+            msg = "cannot serialize"
+            raise ValueError(msg)
 
     bad_caps = {"Extension": _Unserializable()}
     devicemgmt = _mock_devicemgmt(get_services=AsyncMock(side_effect=Fault("x")))

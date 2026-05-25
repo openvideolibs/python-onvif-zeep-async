@@ -196,13 +196,11 @@ def handle_snapshot_errors(func: Callable[..., _T]) -> Callable[..., _T]:
         try:
             return await func(self, uri, *args, **kwargs)
         except TimeoutError as error:
-            raise ONVIFTimeoutError(
-                f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
-            ) from error
+            msg = f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
+            raise ONVIFTimeoutError(msg) from error
         except aiohttp.ClientError as error:
-            raise ONVIFError(
-                f"Error fetching {obscure_user_pass_url(uri)}: {error}"
-            ) from error
+            msg = f"Error fetching {obscure_user_pass_url(uri)}: {error}"
+            raise ONVIFError(msg) from error
 
     return wrapper
 
@@ -224,10 +222,11 @@ class ZeepAsyncClient(BaseZeepAsyncClient):
         try:
             binding = self.wsdl.bindings[binding_name]
         except KeyError:
-            raise ValueError(
+            msg = (
                 f"No binding found with the given QName. Available bindings "
                 f"are: {', '.join(self.wsdl.bindings.keys())}"
-            ) from None
+            )
+            raise ValueError(msg) from None
         return AsyncServiceProxy(self, binding, address=address)
 
 
@@ -278,7 +277,8 @@ class ONVIFService:
         write_timeout: int | None = None,
     ) -> None:
         if not path_isfile(url):
-            raise ONVIFError(f"{url} doesn`t exist!")
+            msg = f"{url} doesn`t exist!"
+            raise ONVIFError(msg)
 
         self.url = url
         self.xaddr = xaddr
@@ -770,7 +770,8 @@ class ONVIFCamera:
             content = await self._try_read_snapshot_content(uri, response)
 
         if response.status == 401:
-            raise ONVIFAuthError(f"Failed to authenticate to {uri}")
+            msg = f"Failed to authenticate to {uri}"
+            raise ONVIFAuthError(msg)
 
         if response.status < 300:
             return content
@@ -801,7 +802,8 @@ class ONVIFCamera:
         """Returns xaddr and wsdl of specified service"""
         # Check if the service is supported
         if name not in SERVICES:
-            raise ONVIFError(f"Unknown service {name}")
+            msg = f"Unknown service {name}"
+            raise ONVIFError(msg)
         wsdl_file = SERVICES[name]["wsdl"]
         namespace = SERVICES[name]["ns"]
 
@@ -812,7 +814,8 @@ class ONVIFCamera:
 
         wsdlpath = os.path.join(self.wsdl_dir, wsdl_file)
         if not path_isfile(wsdlpath):
-            raise ONVIFError(f"No such file: {wsdlpath}")
+            msg = f"No such file: {wsdlpath}"
+            raise ONVIFError(msg)
 
         # XAddr for devicemgmt is fixed:
         if name == "devicemgmt":
@@ -827,9 +830,8 @@ class ONVIFCamera:
         # Get other XAddr
         xaddr = self.xaddrs.get(namespace)
         if not xaddr:
-            raise ONVIFError(
-                f"Device doesn`t support service: {name} with namespace {namespace}"
-            )
+            msg = f"Device doesn`t support service: {name} with namespace {namespace}"
+            raise ONVIFError(msg)
 
         return xaddr, wsdlpath, binding_name
 

@@ -168,9 +168,11 @@ class AIOHTTPTransport(Transport):
             return response, content
         except RuntimeError as exc:
             # Handle RuntimeError which may occur if the session is closed
-            raise RuntimeError(f"Failed to post to {address}: {exc}") from exc
+            msg = f"Failed to post to {address}: {exc}"
+            raise RuntimeError(msg) from exc
         except TimeoutError as exc:
-            raise TimeoutError(f"Request to {address} timed out") from exc
+            msg = f"Request to {address} timed out"
+            raise TimeoutError(msg) from exc
 
     async def post(
         self, address: str, message: str, headers: dict[str, str]
@@ -256,10 +258,12 @@ class AIOHTTPTransport(Transport):
             return self._aiohttp_to_requests_response(response, content)
         except RuntimeError as exc:
             # Handle RuntimeError which may occur if the session is closed
-            raise RuntimeError(f"Failed to get from {address}: {exc}") from exc
+            msg = f"Failed to get from {address}: {exc}"
+            raise RuntimeError(msg) from exc
 
         except TimeoutError as exc:
-            raise TimeoutError(f"Request to {address} timed out") from exc
+            msg = f"Request to {address} timed out"
+            raise TimeoutError(msg) from exc
 
     def load(self, url: str) -> bytes:
         """
