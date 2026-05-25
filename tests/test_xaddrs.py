@@ -24,12 +24,14 @@ MEDIA_NS = "http://www.onvif.org/ver10/media/wsdl"
 EVENTS_NS = "http://www.onvif.org/ver10/events/wsdl"
 
 
-def _capabilities_without_recording() -> dict:
+def _top_level_capabilities() -> dict:
     """GetCapabilities response advertising only top-level services.
 
     Recording/Replay/Search are never present at the top level -- ONVIF
     nests them under the Extension element, so this mirrors what a real
-    device returns from GetCapabilities.
+    device returns from GetCapabilities. The Extension/Recording entry is
+    included precisely to show it is *not* a top-level key the fallback can
+    surface.
     """
     return {
         "Media": {"XAddr": "http://192.168.1.100/onvif/media_service"},
@@ -71,7 +73,7 @@ async def camera() -> AsyncGenerator[ONVIFCamera]:
 def _mock_devicemgmt(get_services: AsyncMock | None = None) -> Mock:
     devicemgmt = Mock()
     devicemgmt.GetCapabilities = AsyncMock(
-        return_value=_capabilities_without_recording()
+        return_value=_top_level_capabilities()
     )
     devicemgmt.GetServices = get_services or AsyncMock(
         return_value=_services_response()

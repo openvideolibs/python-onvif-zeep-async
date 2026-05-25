@@ -83,20 +83,74 @@ async def test_get_device_information(
 
 
 @pytest.mark.asyncio
-async def test_update_xaddrs_discovers_services(
+async def test_update_xaddrs_discovers_services_via_get_services(
     fake_camera: FakeHikvisionCamera, onvif_camera: ONVIFCamera
 ) -> None:
-    """update_xaddrs parses GetCapabilities and records every advertised XAddr."""
+    """update_xaddrs prefers GetServices and records every advertised XAddr.
+
+    GetServices surfaces services nested under the GetCapabilities Extension
+    element (Recording/Replay/Search) that the GetCapabilities parser drops, so
+    they appear here only because GetServices is queried first.
+    """
     await onvif_camera.update_xaddrs()
 
     base = fake_camera.base_url
     assert onvif_camera.xaddrs == {
-        "http://www.onvif.org/ver20/analytics/wsdl": f"{base}/onvif/Analytics",
+        "http://www.onvif.org/ver10/device/wsdl": f"{base}/onvif/device_service",
+        "http://www.onvif.org/ver10/media/wsdl": f"{base}/onvif/Media",
         "http://www.onvif.org/ver10/events/wsdl": f"{base}/onvif/Events",
         "http://www.onvif.org/ver20/imaging/wsdl": f"{base}/onvif/Imaging",
-        "http://www.onvif.org/ver10/media/wsdl": f"{base}/onvif/Media",
         "http://www.onvif.org/ver20/ptz/wsdl": f"{base}/onvif/PTZ",
+        "http://www.onvif.org/ver20/analytics/wsdl": f"{base}/onvif/Analytics",
+        "http://www.onvif.org/ver10/recording/wsdl": f"{base}/onvif/Recording",
+        "http://www.onvif.org/ver10/replay/wsdl": f"{base}/onvif/Replay",
+        "http://www.onvif.org/ver10/search/wsdl": f"{base}/onvif/Search",
     }
+    # GetServices satisfied discovery, so the GetCapabilities round-trip is
+    # skipped entirely.
+    assert fake_camera.last_request("GetServices") is not None
+    assert fake_camera.last_request("GetCapabilities") is None
+
+
+@pytest.mark.asyncio
+async def test_update_xaddrs_falls_back_to_capabilities_when_get_services_broken() -> (
+    None
+):
+    """A device with broken GetServices still discovers its top-level services.
+
+    Older devices answer GetServices with a fault; update_xaddrs must fall back
+    to GetCapabilities rather than crashing. Recording/Replay/Search live under
+    the Extension element and so stay undiscoverable on the fallback path.
+    """
+    camera = FakeHikvisionCamera(broken_get_services=True)
+    await camera.start()
+    cam = ONVIFCamera(
+        camera.host,
+        camera.port,
+        "admin",
+        "Password1",
+        wsdl_dir=WSDL_DIR,
+        no_cache=True,
+    )
+    try:
+        await cam.update_xaddrs()
+        base = camera.base_url
+        # Only the top-level GetCapabilities services are known after fallback.
+        assert cam.xaddrs == {
+            "http://www.onvif.org/ver20/analytics/wsdl": f"{base}/onvif/Analytics",
+            "http://www.onvif.org/ver10/events/wsdl": f"{base}/onvif/Events",
+            "http://www.onvif.org/ver20/imaging/wsdl": f"{base}/onvif/Imaging",
+            "http://www.onvif.org/ver10/media/wsdl": f"{base}/onvif/Media",
+            "http://www.onvif.org/ver20/ptz/wsdl": f"{base}/onvif/PTZ",
+        }
+        # Recording is nested under Extension -- not surfaced by the fallback.
+        assert "http://www.onvif.org/ver10/recording/wsdl" not in cam.xaddrs
+        # GetServices was attempted (and failed) before falling back.
+        assert camera.last_request("GetServices") is not None
+        assert camera.last_request("GetCapabilities") is not None
+    finally:
+        await cam.close()
+        await camera.stop()
 
 
 @pytest.mark.asyncio
@@ -107,6 +161,43 @@ async def test_get_capabilities_returns_dict(onvif_camera: ONVIFCamera) -> None:
     assert capabilities["Media"]["XAddr"].endswith("/onvif/Media")
     assert capabilities["Events"]["WSPullPointSupport"] is True
     assert capabilities["Analytics"]["RuleSupport"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_capabilities_adjusts_time_when_called_before_update_xaddrs() -> None:
+    """get_capabilities runs the adjust_time handshake when it is the first call.
+
+    GetServices does not return the capabilities structure, so _capabilities is
+    populated lazily by get_capabilities(). That path must still perform the
+    adjust_time clock-skew compensation update_xaddrs() does; otherwise a
+    caller invoking get_capabilities() first on a clock-skewed camera would sign
+    GetCapabilities with an un-adjusted timestamp.
+    """
+    camera = FakeHikvisionCamera()
+    # Skew the device clock well away from the host so dt_diff is non-zero.
+    camera.utc_year = 2020
+    await camera.start()
+    cam = ONVIFCamera(
+        camera.host,
+        camera.port,
+        "admin",
+        "Password1",
+        wsdl_dir=WSDL_DIR,
+        no_cache=True,
+        adjust_time=True,
+    )
+    try:
+        assert cam.dt_diff is None
+        capabilities = await cam.get_capabilities()
+
+        # The adjust_time handshake ran: dt_diff was computed from the device
+        # clock and GetSystemDateAndTime was queried.
+        assert cam.dt_diff is not None
+        assert camera.last_request("GetSystemDateAndTime") is not None
+        assert capabilities["Media"]["XAddr"].endswith("/onvif/Media")
+    finally:
+        await cam.close()
+        await camera.stop()
 
 
 @pytest.mark.asyncio

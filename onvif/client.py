@@ -455,13 +455,27 @@ class ONVIFCamera:
         self._snapshot_connector = TCPConnector(ssl=_NO_VERIFY_SSL_CONTEXT)
         self._snapshot_client = ClientSession(connector=self._snapshot_connector)
 
-    async def get_capabilities(self) -> dict[str, Any]:
-        """Get device capabilities."""
+    async def get_capabilities(self) -> dict[str, Any] | None:
+        """Get device capabilities.
+
+        Returns the parsed GetCapabilities structure, or ``None`` if the device
+        returned a payload that could not be serialized -- capabilities parsing
+        is best-effort and swallows serialization errors (see
+        ``_update_xaddrs_from_capabilities``).
+        """
         if self._capabilities is None:
             # update_xaddrs() prefers GetServices, which does not return the
             # Category-keyed capabilities structure, so fetch GetCapabilities
             # here on demand to populate self._capabilities.
             devicemgmt = await self.create_devicemgmt_service()
+            if self.dt_diff is None:
+                # update_xaddrs() may not have run yet, so reproduce its
+                # adjust_time clock-skew compensation here. Otherwise a caller
+                # invoking get_capabilities() before update_xaddrs() on a
+                # clock-skewed camera would sign GetCapabilities with an
+                # un-adjusted timestamp and fail authentication. A no-op when
+                # adjust_time is disabled.
+                devicemgmt = await self._adjust_time(devicemgmt)
             await self._update_xaddrs_from_capabilities(devicemgmt)
         return self._capabilities
 
@@ -469,25 +483,7 @@ class ONVIFCamera:
         """Update xaddrs for services."""
         self.dt_diff = None
         devicemgmt = await self.create_devicemgmt_service()
-        if self.adjust_time:
-            try:
-                sys_date = await devicemgmt.authless_GetSystemDateAndTime()
-            except zeep.exceptions.Fault:
-                # Looks like we should try with auth
-                sys_date = await devicemgmt.GetSystemDateAndTime()
-            cdate = sys_date.UTCDateTime
-            cam_date = dt.datetime(
-                cdate.Date.Year,
-                cdate.Date.Month,
-                cdate.Date.Day,
-                cdate.Time.Hour,
-                cdate.Time.Minute,
-                cdate.Time.Second,
-            )
-            self.dt_diff = cam_date - dt.datetime.utcnow()
-            await devicemgmt.close()
-            del self.services[devicemgmt.binding_key]
-            devicemgmt = await self.create_devicemgmt_service()
+        devicemgmt = await self._adjust_time(devicemgmt)
 
         # Get XAddr of services on the device.
         #
@@ -503,6 +499,41 @@ class ONVIFCamera:
         self.xaddrs = {}
         if not await self._update_xaddrs_from_services(devicemgmt):
             await self._update_xaddrs_from_capabilities(devicemgmt)
+
+    async def _adjust_time(self, devicemgmt: ONVIFService) -> ONVIFService:
+        """Compute the device clock offset and recreate the devicemgmt service.
+
+        When ``adjust_time`` is enabled, query the device's system clock and
+        store its offset from the host clock in ``self.dt_diff`` so subsequent
+        WS-Security timestamps compensate for clock skew (some cameras reject
+        requests whose ``Created`` timestamp drifts too far from their own). The
+        devicemgmt service is recreated afterwards so it is rebuilt with the
+        freshly computed ``dt_diff``. A no-op when ``adjust_time`` is disabled.
+
+        Both ``update_xaddrs()`` and ``get_capabilities()`` call this so the
+        clock-skew handshake happens regardless of which one runs first.
+        Returns the devicemgmt service the caller should continue to use.
+        """
+        if not self.adjust_time:
+            return devicemgmt
+        try:
+            sys_date = await devicemgmt.authless_GetSystemDateAndTime()
+        except zeep.exceptions.Fault:
+            # Looks like we should try with auth
+            sys_date = await devicemgmt.GetSystemDateAndTime()
+        cdate = sys_date.UTCDateTime
+        cam_date = dt.datetime(
+            cdate.Date.Year,
+            cdate.Date.Month,
+            cdate.Date.Day,
+            cdate.Time.Hour,
+            cdate.Time.Minute,
+            cdate.Time.Second,
+        )
+        self.dt_diff = cam_date - dt.datetime.utcnow()
+        await devicemgmt.close()
+        del self.services[devicemgmt.binding_key]
+        return await self.create_devicemgmt_service()
 
     async def _update_xaddrs_from_services(self, devicemgmt: ONVIFService) -> bool:
         """Populate XAddrs from GetServices.
@@ -533,7 +564,14 @@ class ONVIFCamera:
                 namespace = service.Namespace
                 xaddr = service.XAddr
             except AttributeError:
-                logger.exception("Unexpected service entry from GetServices")
+                # Skipping malformed entries is expected, handled behaviour, so
+                # log at debug with host and entry detail rather than emitting a
+                # full traceback per bad entry (noisy in production).
+                logger.debug(
+                    "%s: Skipping malformed service entry from GetServices: %r",
+                    self.host,
+                    service,
+                )
                 continue
             if namespace and xaddr:
                 self.xaddrs[namespace] = normalize_url(xaddr)
