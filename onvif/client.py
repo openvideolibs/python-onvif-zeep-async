@@ -458,7 +458,11 @@ class ONVIFCamera:
     async def get_capabilities(self) -> dict[str, Any]:
         """Get device capabilities."""
         if self._capabilities is None:
-            await self.update_xaddrs()
+            # update_xaddrs() prefers GetServices, which does not return the
+            # Category-keyed capabilities structure, so fetch GetCapabilities
+            # here on demand to populate self._capabilities.
+            devicemgmt = await self.create_devicemgmt_service()
+            await self._update_xaddrs_from_capabilities(devicemgmt)
         return self._capabilities
 
     async def update_xaddrs(self):
@@ -485,48 +489,45 @@ class ONVIFCamera:
             del self.services[devicemgmt.binding_key]
             devicemgmt = await self.create_devicemgmt_service()
 
-        # Get XAddr of services on the device
+        # Get XAddr of services on the device.
+        #
+        # Prefer GetServices -- the ONVIF-recommended discovery method that
+        # returns every service the device exposes (recording, replay, search,
+        # receiver, deviceio, ...), not just the top-level subset advertised by
+        # GetCapabilities. Fall back to GetCapabilities only when GetServices is
+        # unsupported or returns nothing, which keeps older devices working and
+        # avoids a redundant second round-trip on modern ones. self._capabilities
+        # is populated lazily by get_capabilities() since GetServices does not
+        # return the Category-keyed capabilities structure.
+        # See https://github.com/openvideolibs/python-onvif-zeep-async/issues/97
         self.xaddrs = {}
-        capabilities = await devicemgmt.GetCapabilities({"Category": "All"})
-        for name in capabilities:
-            capability = capabilities[name]
-            try:
-                if name.lower() in SERVICES and capability is not None:
-                    namespace = SERVICES[name.lower()]["ns"]
-                    self.xaddrs[namespace] = normalize_url(capability["XAddr"])
-            except Exception:
-                logger.exception("Unexpected service type")
-        # GetCapabilities only advertises a subset of services at the top level
-        # (Analytics/Device/Events/Imaging/Media/PTZ). Services such as
-        # recording, replay, search, receiver and deviceio are reported via
-        # GetServices instead (or nested under the Extension element), so query
-        # GetServices -- the ONVIF-recommended discovery method -- to populate
-        # their XAddrs. See https://github.com/openvideolibs/python-onvif-zeep-async/issues/97
-        await self._update_xaddrs_from_services(devicemgmt)
-        try:
-            self._capabilities = self.to_dict(capabilities)
-        except Exception:
-            logger.exception("Failed to parse capabilities")
+        if not await self._update_xaddrs_from_services(devicemgmt):
+            await self._update_xaddrs_from_capabilities(devicemgmt)
 
-    async def _update_xaddrs_from_services(self, devicemgmt: ONVIFService) -> None:
+    async def _update_xaddrs_from_services(self, devicemgmt: ONVIFService) -> bool:
         """Populate XAddrs from GetServices.
 
-        GetServices returns every service the device exposes, which is more
-        complete than GetCapabilities. Older devices may not implement it, so
-        a failure here is non-fatal -- the XAddrs already gathered from
-        GetCapabilities are left untouched.
+        GetServices is the ONVIF-recommended discovery method and returns every
+        service the device exposes -- far more complete than GetCapabilities.
+        Older devices may not implement it; a failure or empty response here is
+        non-fatal and signals the caller to fall back to GetCapabilities.
+
+        Returns True if at least one XAddr was discovered, False otherwise.
         """
         try:
             services = await devicemgmt.GetServices({"IncludeCapability": False})
-        except ONVIFError as err:
-            # Service operations are wrapped by safe_func, so every failure
-            # (unsupported operation, timeout, auth error, malformed response)
-            # surfaces as ONVIFError. Log the underlying error so unexpected
-            # failures stay visible while still treating it as non-fatal.
+        except (ONVIFError, zeep.exceptions.Fault) as err:
+            # An unsupported GetServices raises zeep.exceptions.Fault directly
+            # when awaited -- safe_func only wraps the synchronous request build,
+            # not the await -- while other failures surface as ONVIFError (which
+            # ONVIFTimeoutError subclasses). Either case is non-fatal: log the
+            # underlying error so unexpected failures stay visible, and let the
+            # caller fall back to GetCapabilities.
             logger.debug(
                 "%s: Could not get services via GetServices: %s", self.host, err
             )
-            return
+            return False
+        found = False
         for service in services or []:
             try:
                 namespace = service.Namespace
@@ -536,6 +537,32 @@ class ONVIFCamera:
                 continue
             if namespace and xaddr:
                 self.xaddrs[namespace] = normalize_url(xaddr)
+                found = True
+        return found
+
+    async def _update_xaddrs_from_capabilities(self, devicemgmt: ONVIFService) -> None:
+        """Populate XAddrs and capabilities from GetCapabilities.
+
+        GetCapabilities only advertises the top-level services
+        (Analytics/Device/Events/Imaging/Media/PTZ); services nested under the
+        Extension element (recording, replay, search, ...) are not discoverable
+        here -- those come from GetServices. This is the fallback for devices
+        that do not implement GetServices and is also the only source for
+        self._capabilities, which GetServices does not return.
+        """
+        capabilities = await devicemgmt.GetCapabilities({"Category": "All"})
+        for name in capabilities:
+            capability = capabilities[name]
+            try:
+                if name.lower() in SERVICES and capability is not None:
+                    namespace = SERVICES[name.lower()]["ns"]
+                    self.xaddrs[namespace] = normalize_url(capability["XAddr"])
+            except Exception:
+                logger.exception("Unexpected service type")
+        try:
+            self._capabilities = self.to_dict(capabilities)
+        except Exception:
+            logger.exception("Failed to parse capabilities")
 
     def has_broken_relative_time(
         self,
