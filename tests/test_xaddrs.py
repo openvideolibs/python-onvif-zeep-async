@@ -115,7 +115,9 @@ async def test_update_xaddrs_falls_back_when_get_services_unsupported(
     camera: ONVIFCamera,
 ) -> None:
     """Older devices without GetServices still get top-level XAddrs and don't crash."""
-    failing_get_services = AsyncMock(side_effect=Exception("not supported"))
+    # safe_func wraps every service-call failure as ONVIFError, so that is what
+    # _update_xaddrs_from_services sees when a device lacks GetServices.
+    failing_get_services = AsyncMock(side_effect=ONVIFError("not supported"))
     devicemgmt = _mock_devicemgmt(get_services=failing_get_services)
     with patch.object(
         camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
@@ -127,3 +129,29 @@ async def test_update_xaddrs_falls_back_when_get_services_unsupported(
     # Recording remains undiscoverable, surfacing the standard error.
     with pytest.raises(ONVIFError):
         camera.get_definition("recording")
+
+
+@pytest.mark.asyncio
+async def test_update_xaddrs_skips_malformed_service_entries(
+    camera: ONVIFCamera,
+) -> None:
+    """Entries missing Namespace/XAddr are skipped without aborting discovery."""
+    malformed = [
+        Mock(spec=[]),  # no Namespace/XAddr attributes -> AttributeError
+        Mock(Namespace=REPLAY_NS, XAddr=None),  # falsy XAddr -> skipped
+        Mock(Namespace=None, XAddr="http://192.168.1.100/onvif/x"),  # falsy ns
+        Mock(
+            Namespace=RECORDING_NS,
+            XAddr="http://192.168.1.100/onvif/recording_service",
+        ),
+    ]
+    devicemgmt = _mock_devicemgmt(get_services=AsyncMock(return_value=malformed))
+    with patch.object(
+        camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+    ):
+        await camera.update_xaddrs()
+
+    # The single well-formed entry is still discovered...
+    assert camera.xaddrs[RECORDING_NS] == "http://192.168.1.100/onvif/recording_service"
+    # ...while the malformed ones are dropped.
+    assert REPLAY_NS not in camera.xaddrs

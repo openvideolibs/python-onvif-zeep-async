@@ -518,8 +518,14 @@ class ONVIFCamera:
         """
         try:
             services = await devicemgmt.GetServices({"IncludeCapability": False})
-        except Exception:
-            logger.debug("%s: GetServices is not supported", self.host)
+        except ONVIFError as err:
+            # Service operations are wrapped by safe_func, so every failure
+            # (unsupported operation, timeout, auth error, malformed response)
+            # surfaces as ONVIFError. Log the underlying error so unexpected
+            # failures stay visible while still treating it as non-fatal.
+            logger.debug(
+                "%s: Could not get services via GetServices: %s", self.host, err
+            )
             return
         for service in services or []:
             try:
