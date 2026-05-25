@@ -6,7 +6,84 @@ plugins = ["covdefaults"]
 
 
 [tool.ruff]
+required-version = ">=0.5.0"
 target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "A", # flake8-builtins
+  "ASYNC", # async rules
+  "B", # flake8-bugbear
+  "BLE", # flake8-blind-except
+  "C4", # flake8-comprehensions
+  "C90", # mccabe complexity
+  "DTZ", # flake8-datetimez
+  "E", # pycodestyle
+  "EM", # flake8-errmsg
+  "EXE", # flake8-executable
+  "F", # pyflakes/autoflake
+  "FA", # flake8-future-annotations
+  "FIX", # flake8-fixme
+  "FLY", # flynt
+  "FURB", # refurb
+  "G", # flake8-logging-format
+  "I", # isort
+  "ICN", # flake8-import-conventions
+  "INP", # flake8-no-pep420 (implicit namespace packages)
+  "ISC", # flake8-implicit-str-concat
+  "LOG", # flake8-logging
+  "N", # pep8-naming
+  "NPY", # numpy-specific rules
+  "PERF", # Perflint
+  "PGH", # pygrep-hooks
+  "PIE", # flake8-pie
+  "PL", # pylint
+  "PT", # flake8-pytest-style
+  "PYI", # flake8-pyi
+  "Q", # flake8-quotes
+  "UP", # pyupgrade
+  "RET", # flake8-return
+  "RSE", # flake8-raise
+  "RUF", # ruff
+  "S", # flake8-bandit
+  "SIM", # flake8-SIM
+  "SLF", # flake8-self
+  "SLOT", # flake8-slots
+  "T10", # flake8-debugger
+  "T20", # flake8-print
+  "TC", # flake8-type-checking
+  "TD", # flake8-todos
+  "TID", # Tidy imports
+  "TRY", # try rules
+  "W", # pycodestyle warnings
+  "YTT", # flake8-2020
+]
+
+ignore = [
+  "E501", # line too long (handled by formatter)
+  "E721", # type comparison
+  "PLR0911", # too many return statements
+  "PLR0912", # too many branches
+  "PLR0913", # too many arguments
+  "PLR0915", # too many statements
+  "PLR2004", # magic value used in comparison
+  "PLW2901", # loop variable overwritten
+  "TRY003", # long messages outside exception class
+  "TID252", # relative imports from parent modules
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["INP", "S101", "S105", "S106", "SLF", "T20"]
+"examples/**" = ["INP", "T20"]
+"docs/**" = ["INP"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = [
+  "onvif", "tests"
+]
+combine-as-imports = true
+split-on-trailing-comma = false
 
 [build-system]
 requires = ['setuptools>=65.4.1', 'wheel']

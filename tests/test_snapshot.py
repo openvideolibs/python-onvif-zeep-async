@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest_asyncio
-
 import aiohttp
-import pytest
 from aioresponses import aioresponses
+import pytest
+import pytest_asyncio
+import zeep.exceptions
+
 from onvif import ONVIFCamera
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 
 @pytest.fixture
@@ -201,8 +205,6 @@ async def test_get_snapshot_no_uri_available(camera: ONVIFCamera) -> None:
     ) as mock_media:
         mock_service = Mock()
         mock_service.create_type = Mock(return_value=Mock())
-
-        import zeep.exceptions
 
         mock_service.GetSnapshotUri = AsyncMock(
             side_effect=zeep.exceptions.Fault("Snapshot not supported")

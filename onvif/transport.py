@@ -15,7 +15,8 @@ class AsyncSafeTransport(Transport):
     def load(self, url: str) -> None:
         """Load the given XML document."""
         if not path_isfile(url):
-            raise RuntimeError(f"Loading {url} is not supported in async mode")
+            msg = f"Loading {url} is not supported in async mode"
+            raise RuntimeError(msg)
         with open(os.path.expanduser(url), "rb") as fh:
             return fh.read()
 

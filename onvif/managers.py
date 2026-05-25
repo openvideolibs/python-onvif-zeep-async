@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 import asyncio
 import datetime as dt
 import logging
-from abc import abstractmethod
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
-from zeep.wsdl.bindings.soap import SoapOperation
 
-import aiohttp
 from onvif.exceptions import ONVIFError
 
 from .settings import DEFAULT_SETTINGS
@@ -36,6 +34,10 @@ SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 MINIMUM_SUBSCRIPTION_SECONDS = 60.0
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from zeep.wsdl.bindings.soap import SoapOperation
+
     from onvif.client import ONVIFCamera, ONVIFService
 
 
@@ -82,7 +84,7 @@ class BaseManager:
         """Stop the manager."""
         logger.debug("%s: Stop the notification manager", self._device.host)
         self._cancel_renewals()
-        assert self._subscription, "Call start first"
+        assert self._subscription, "Call start first"  # noqa: S101
         await self._subscription.Unsubscribe()
 
     async def shutdown(self) -> None:
@@ -231,7 +233,7 @@ class NotificationManager(BaseManager):
         )
         # pylint: disable=protected-access
         device.xaddrs["http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"] = (
-            normalize_url(result.SubscriptionReference.Address._value_1)
+            normalize_url(result.SubscriptionReference.Address._value_1)  # noqa: SLF001
         )
         # Create subscription manager
         # 5.2.3 BASIC NOTIFICATION INTERFACE - NOTIFY
@@ -267,7 +269,7 @@ class NotificationManager(BaseManager):
         """Process a notification message."""
         if not self._operation:
             logger.debug("%s: Notifications not setup", self._device.host)
-            return
+            return None
         try:
             envelope = parse_xml(
                 content,  # type: ignore[arg-type]
@@ -281,8 +283,8 @@ class NotificationManager(BaseManager):
                     ASYNC_TRANSPORT,
                     settings=DEFAULT_SETTINGS,
                 )
-            except XMLSyntaxError as exc:
-                logger.error("Received invalid XML: %s (%s)", exc, content)
+            except XMLSyntaxError:
+                logger.exception("Received invalid XML: %s", content)
                 return None
         return self._operation.process_reply(envelope)
 
@@ -309,7 +311,7 @@ class PullPointManager(BaseManager):
         # pylint: disable=protected-access
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
-        ] = normalize_url(result.SubscriptionReference.Address._value_1)
+        ] = normalize_url(result.SubscriptionReference.Address._value_1)  # noqa: SLF001
         # Create subscription manager
         self._subscription = await device.create_subscription_service(
             "PullPointSubscription"

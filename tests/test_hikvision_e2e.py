@@ -11,16 +11,18 @@ from __future__ import annotations
 
 import datetime as dt
 import os
-from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
+# fake_hikvision is a sibling test helper; pytest puts tests/ on sys.path.
+from fake_hikvision import WSSE_NS, FakeHikvisionCamera
 import pytest
 import pytest_asyncio
 
 import onvif
 from onvif import ONVIFCamera
 
-# fake_hikvision is a sibling test helper; pytest puts tests/ on sys.path.
-from fake_hikvision import WSSE_NS, FakeHikvisionCamera
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 WSDL_DIR = os.path.join(os.path.dirname(onvif.__file__), "wsdl")
 DIGEST_TYPE = (

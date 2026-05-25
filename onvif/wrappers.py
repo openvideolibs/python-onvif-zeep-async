@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
-from typing import ParamSpec, TypeVar
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 import aiohttp
 
 from .const import BACKOFF_TIME, DEFAULT_ATTEMPTS
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -50,7 +52,7 @@ def retry_connection_error(
                         "Attempt %s/%s for %s", attempt + 1, attempts, func.__name__
                     )
                     return await func(*args, **kwargs)
-                except exception as ex:
+                except exception as ex:  # noqa: PERF203 - retry loop catches per-attempt
                     #
                     # We should only need to retry on ServerDisconnectedError but some cameras
                     # are flakey and sometimes do not respond to the Renew request so we
@@ -80,6 +82,7 @@ def retry_connection_error(
                         exc_info=True,
                     )
                     await asyncio.sleep(backoff)
+            return None
 
         return _async_wrap_connection_error_retry
 

@@ -5,18 +5,21 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
-from collections.abc import AsyncGenerator, Generator
-from unittest.mock import AsyncMock, Mock, MagicMock, patch
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
-import pytest
-import pytest_asyncio
 from aiohttp import ClientSession, web
 from lxml import etree
+import pytest
+import pytest_asyncio
 
 import onvif
 from onvif.client import AsyncTransportProtocolErrorHandler, ONVIFService
 from onvif.zeep_aiohttp import AIOHTTPTransport
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Generator
 
 
 @pytest.fixture
@@ -103,7 +106,6 @@ class DisconnectingHTTPProtocol(asyncio.Protocol):
 
     def connection_lost(self, exc: Exception | None) -> None:
         """Called when the connection is lost."""
-        pass
 
 
 class DisconnectingServer:
@@ -288,7 +290,7 @@ async def test_no_retry_with_proper_connection_close(
         envelope = etree.Element("{http://test}TestRequest")
 
         # Make 3 requests - no retries should occur
-        for i in range(3):
+        for _i in range(3):
             result = await transport.post_xml(
                 f"{base_url}/onvif/device_service", envelope, {}
             )

@@ -1,3 +1,4 @@
+from typing import ClassVar
 import uuid
 
 from lxml import etree
@@ -10,9 +11,9 @@ WSA = ElementMaker(namespace=ns.WSA, nsmap={"wsa": ns.WSA})
 
 
 class WsAddressingIfMissingPlugin(Plugin):
-    nsmap = {"wsa": ns.WSA}
+    nsmap: ClassVar[dict[str, str]] = {"wsa": ns.WSA}
 
-    def __init__(self, address_url: str = None):
+    def __init__(self, address_url: str | None = None):
         self.address_url = address_url
 
     def egress(self, envelope, http_headers, operation, binding_options):

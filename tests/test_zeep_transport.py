@@ -5,11 +5,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 import httpx
-import pytest
 from lxml import etree
 from multidict import CIMultiDict
-from onvif.zeep_aiohttp import AIOHTTPTransport
+import pytest
 from requests import Response as RequestsResponse
+
+from onvif.zeep_aiohttp import AIOHTTPTransport
 
 
 def create_mock_session(timeout=None):
@@ -184,7 +185,7 @@ async def test_timeout_handling():
 
     transport.session = mock_session
 
-    with pytest.raises(TimeoutError, match="Request to .* timed out"):
+    with pytest.raises(TimeoutError, match=r"Request to .* timed out"):
         await transport.post(
             "http://example.com/service", "<request>test</request>", {}
         )
@@ -428,9 +429,7 @@ async def test_cookies_in_httpx_response():
     # Mock cookies
     mock_cookie = Mock()
     mock_cookie.value = "abc123"
-    mock_cookie.get.side_effect = lambda k: {"domain": ".example.com", "path": "/"}.get(
-        k
-    )
+    mock_cookie.get.side_effect = {"domain": ".example.com", "path": "/"}.get
 
     mock_cookies = Mock()
     mock_cookies.items.return_value = [("session", mock_cookie)]
@@ -540,18 +539,20 @@ def test_sync_load_creates_new_loop():
     mock_response.content = b"<wsdl/>"
 
     # This should work even if there's already an event loop
-    with patch.object(transport, "get", new=AsyncMock(return_value=mock_response)):
-        with patch("asyncio.new_event_loop") as mock_new_loop:
-            mock_loop = Mock()
-            mock_loop.run_until_complete.return_value = mock_response
-            mock_new_loop.return_value = mock_loop
+    with (
+        patch.object(transport, "get", new=AsyncMock(return_value=mock_response)),
+        patch("asyncio.new_event_loop") as mock_new_loop,
+    ):
+        mock_loop = Mock()
+        mock_loop.run_until_complete.return_value = mock_response
+        mock_new_loop.return_value = mock_loop
 
-            result = transport.load("http://example.com/wsdl")
+        result = transport.load("http://example.com/wsdl")
 
-            # Should have created new loop
-            mock_new_loop.assert_called_once()
-            mock_loop.close.assert_called_once()
-            assert result == b"<wsdl/>"
+        # Should have created new loop
+        mock_new_loop.assert_called_once()
+        mock_loop.close.assert_called_once()
+        assert result == b"<wsdl/>"
 
 
 @pytest.mark.asyncio

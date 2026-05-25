@@ -6,22 +6,19 @@ import asyncio
 import datetime as dt
 import logging
 import os.path
-from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-import zeep.helpers
+import aiohttp
+from aiohttp import BasicAuth, ClientSession, DigestAuthMiddleware, TCPConnector
 from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient
+import zeep.helpers
 from zeep.proxy import AsyncServiceProxy
 from zeep.wsdl import Document
 from zeep.wsse.username import UsernameToken
 
-import aiohttp
-import httpx
-from aiohttp import BasicAuth, ClientSession, DigestAuthMiddleware, TCPConnector
 from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
-from requests import Response
 
 from .const import KEEPALIVE_EXPIRY
 from .managers import NotificationManager, PullPointManager
@@ -39,6 +36,12 @@ from .util import (
 from .wrappers import retry_connection_error
 from .wsa import WsAddressingIfMissingPlugin
 from .zeep_aiohttp import AIOHTTPTransport
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import httpx
+    from requests import Response
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)
@@ -167,11 +170,11 @@ async def _cached_document(url: str) -> Document:
         )[0]
         logger.debug("Overriding default datetime type to use FastDateTime")
         instance = FastDateTime(is_global=True)
-        schema.register_type(FastDateTime._default_qname, instance)
+        schema.register_type(FastDateTime._default_qname, instance)  # noqa: SLF001
 
         logger.debug("Overriding default time type to use ForgivingTime")
         instance = ForgivingTime(is_global=True)
-        schema.register_type(ForgivingTime._default_qname, instance)
+        schema.register_type(ForgivingTime._default_qname, instance)  # noqa: SLF001
 
         document.types.add_documents([None], url)
         # Perform the original load
@@ -193,13 +196,11 @@ def handle_snapshot_errors(func: Callable[..., _T]) -> Callable[..., _T]:
         try:
             return await func(self, uri, *args, **kwargs)
         except TimeoutError as error:
-            raise ONVIFTimeoutError(
-                f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
-            ) from error
+            msg = f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
+            raise ONVIFTimeoutError(msg) from error
         except aiohttp.ClientError as error:
-            raise ONVIFError(
-                f"Error fetching {obscure_user_pass_url(uri)}: {error}"
-            ) from error
+            msg = f"Error fetching {obscure_user_pass_url(uri)}: {error}"
+            raise ONVIFError(msg) from error
 
     return wrapper
 
@@ -221,10 +222,11 @@ class ZeepAsyncClient(BaseZeepAsyncClient):
         try:
             binding = self.wsdl.bindings[binding_name]
         except KeyError:
-            raise ValueError(
+            msg = (
                 f"No binding found with the given QName. Available bindings "
                 f"are: {', '.join(self.wsdl.bindings.keys())}"
-            ) from None
+            )
+            raise ValueError(msg) from None
         return AsyncServiceProxy(self, binding, address=address)
 
 
@@ -275,7 +277,8 @@ class ONVIFService:
         write_timeout: int | None = None,
     ) -> None:
         if not path_isfile(url):
-            raise ONVIFError(f"{url} doesn`t exist!")
+            msg = f"{url} doesn`t exist!"
+            raise ONVIFError(msg)
 
         self.url = url
         self.xaddr = xaddr
@@ -377,10 +380,7 @@ class ONVIFService:
             def wrapped(params=None):
                 def call(params=None):
                     # No params
-                    if params is None:
-                        params = {}
-                    else:
-                        params = ONVIFService.to_dict(params)
+                    params = {} if params is None else ONVIFService.to_dict(params)
                     try:
                         ret = func(**params)
                     except TypeError:
@@ -542,8 +542,9 @@ class ONVIFCamera:
             cdate.Time.Hour,
             cdate.Time.Minute,
             cdate.Time.Second,
+            tzinfo=dt.timezone.utc,
         )
-        self.dt_diff = cam_date - dt.datetime.utcnow()
+        self.dt_diff = cam_date - utcnow()
         await devicemgmt.close()
         del self.services[devicemgmt.binding_key]
         return await self.create_devicemgmt_service()
@@ -766,7 +767,8 @@ class ONVIFCamera:
             content = await self._try_read_snapshot_content(uri, response)
 
         if response.status == 401:
-            raise ONVIFAuthError(f"Failed to authenticate to {uri}")
+            msg = f"Failed to authenticate to {uri}"
+            raise ONVIFAuthError(msg)
 
         if response.status < 300:
             return content
@@ -797,7 +799,8 @@ class ONVIFCamera:
         """Returns xaddr and wsdl of specified service"""
         # Check if the service is supported
         if name not in SERVICES:
-            raise ONVIFError(f"Unknown service {name}")
+            msg = f"Unknown service {name}"
+            raise ONVIFError(msg)
         wsdl_file = SERVICES[name]["wsdl"]
         namespace = SERVICES[name]["ns"]
 
@@ -808,7 +811,8 @@ class ONVIFCamera:
 
         wsdlpath = os.path.join(self.wsdl_dir, wsdl_file)
         if not path_isfile(wsdlpath):
-            raise ONVIFError(f"No such file: {wsdlpath}")
+            msg = f"No such file: {wsdlpath}"
+            raise ONVIFError(msg)
 
         # XAddr for devicemgmt is fixed:
         if name == "devicemgmt":
@@ -823,9 +827,8 @@ class ONVIFCamera:
         # Get other XAddr
         xaddr = self.xaddrs.get(namespace)
         if not xaddr:
-            raise ONVIFError(
-                f"Device doesn`t support service: {name} with namespace {namespace}"
-            )
+            msg = f"Device doesn`t support service: {name} with namespace {namespace}"
+            raise ONVIFError(msg)
 
         return xaddr, wsdlpath, binding_name
 
@@ -848,15 +851,14 @@ class ONVIFCamera:
         if existing_service:
             if existing_service.xaddr == xaddr:
                 return existing_service
-            else:
-                # Close the existing service since it's no longer valid.
-                # This can happen when a new PullPointSubscription is created.
-                logger.debug(
-                    "Closing service %s with %s", binding_key, existing_service.xaddr
-                )
-                # Hold a reference to the task so it doesn't get
-                # garbage collected before it completes.
-                await existing_service.close()
+            # Close the existing service since it's no longer valid.
+            # This can happen when a new PullPointSubscription is created.
+            logger.debug(
+                "Closing service %s with %s", binding_key, existing_service.xaddr
+            )
+            # Hold a reference to the task so it doesn't get
+            # garbage collected before it completes.
+            await existing_service.close()
             self.services.pop(binding_key)
 
         logger.debug("Creating service %s with %s", binding_key, xaddr)

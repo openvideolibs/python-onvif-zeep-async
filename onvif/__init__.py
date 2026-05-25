@@ -21,12 +21,12 @@ def zeep_pythonvalue(self, xmlvalue):
 zeep.xsd.simple.AnySimpleType.pythonvalue = zeep_pythonvalue
 
 __all__ = (
-    "ONVIFService",
+    "ERR_ONVIF_BUILD",
+    "ERR_ONVIF_PROTOCOL",
+    "ERR_ONVIF_UNKNOWN",
+    "ERR_ONVIF_WSDL",
+    "SERVICES",
     "ONVIFCamera",
     "ONVIFError",
-    "ERR_ONVIF_UNKNOWN",
-    "ERR_ONVIF_PROTOCOL",
-    "ERR_ONVIF_WSDL",
-    "ERR_ONVIF_BUILD",
-    "SERVICES",
+    "ONVIFService",
 )
