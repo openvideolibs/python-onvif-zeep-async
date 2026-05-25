@@ -380,10 +380,7 @@ class ONVIFService:
             def wrapped(params=None):
                 def call(params=None):
                     # No params
-                    if params is None:
-                        params = {}
-                    else:
-                        params = ONVIFService.to_dict(params)
+                    params = {} if params is None else ONVIFService.to_dict(params)
                     try:
                         ret = func(**params)
                     except TypeError:
