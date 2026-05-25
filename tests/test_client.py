@@ -312,7 +312,7 @@ def test_get_definition_with_port_type() -> None:
     namespace = "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
     cam.xaddrs[namespace] = "http://1.2.3.4/onvif/pullpoint"
 
-    xaddr, wsdlpath, binding_name = cam.get_definition(
+    xaddr, wsdlpath, _binding_name = cam.get_definition(
         "pullpoint", port_type="PullPointSubscription"
     )
 
