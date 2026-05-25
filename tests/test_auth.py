@@ -51,6 +51,7 @@ def test_digest_created_uses_zulu_timestamp() -> None:
     envelope = _apply("admin", "pass1234", use_digest=True)
     created = envelope.find(f".//{{{WSU_NS}}}Created")
     assert created is not None
+    assert created.text is not None
     assert created.text.endswith("Z")
     assert "+00:00" not in created.text
 
@@ -78,6 +79,13 @@ def test_digest_value_consistent_with_zulu_created() -> None:
     nonce_el = envelope.find(f".//{{{WSSE_NS}}}Nonce")
     created_el = envelope.find(f".//{{{WSU_NS}}}Created")
     password_el = envelope.find(f".//{{{WSSE_NS}}}Password")
+
+    assert nonce_el is not None
+    assert nonce_el.text is not None
+    assert created_el is not None
+    assert created_el.text is not None
+    assert password_el is not None
+    assert password_el.text is not None
 
     nonce = base64.b64decode(nonce_el.text)
     expected = base64.b64encode(
