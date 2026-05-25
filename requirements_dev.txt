@@ -7,6 +7,7 @@ pytest-cov==7.0.0
 pytest-asyncio==1.3.0
 covdefaults==2.3.0
 aioresponses==0.7.8
+blockbuster==1.5.26
 
 # pre-commit
 pre-commit==4.5.1
