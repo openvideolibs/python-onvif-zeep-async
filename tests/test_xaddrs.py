@@ -7,11 +7,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 import pytest_asyncio
 from zeep.exceptions import Fault
 
 import onvif
-import pytest
 from onvif import ONVIFCamera
 from onvif.exceptions import ONVIFError
 

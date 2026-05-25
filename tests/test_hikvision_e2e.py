@@ -16,11 +16,11 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 
-import onvif
-from onvif import ONVIFCamera
-
 # fake_hikvision is a sibling test helper; pytest puts tests/ on sys.path.
 from fake_hikvision import WSSE_NS, FakeHikvisionCamera
+
+import onvif
+from onvif import ONVIFCamera
 
 WSDL_DIR = os.path.join(os.path.dirname(onvif.__file__), "wsdl")
 DIGEST_TYPE = (

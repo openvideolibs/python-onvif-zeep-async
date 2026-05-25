@@ -8,8 +8,9 @@ import httpx
 import pytest
 from lxml import etree
 from multidict import CIMultiDict
-from onvif.zeep_aiohttp import AIOHTTPTransport
 from requests import Response as RequestsResponse
+
+from onvif.zeep_aiohttp import AIOHTTPTransport
 
 
 def create_mock_session(timeout=None):

@@ -1,14 +1,16 @@
 """Example to fetch pullpoint events."""
 
-from aiohttp import web
 import argparse
 import asyncio
 import datetime as dt
 import logging
-import onvif
 import os.path
 import pprint
 import sys
+
+from aiohttp import web
+
+import onvif
 
 SUBSCRIPTION_TIME = dt.timedelta(minutes=1)
 WAIT_TIME = dt.timedelta(seconds=30)

@@ -10,10 +10,9 @@ from functools import lru_cache, partial
 from typing import Any
 from urllib.parse import ParseResultBytes, urlparse, urlunparse
 
-from zeep.exceptions import Fault
-
 from multidict import CIMultiDict
 from yarl import URL
+from zeep.exceptions import Fault
 
 utcnow: partial[dt.datetime] = partial(dt.datetime.now, dt.timezone.utc)
 
