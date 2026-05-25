@@ -51,7 +51,7 @@ def test_parse_invalid_time() -> None:
 
 
 def test_fix_datetime_missing_time() -> None:
-    assert FastDateTime().pythonvalue("2024-08-17") == datetime.datetime(
+    assert FastDateTime().pythonvalue("2024-08-17") == datetime.datetime(  # noqa: DTZ001
         2024, 8, 17, 0, 0, 0
     )
 
@@ -60,7 +60,7 @@ def test_fix_datetime_missing_t() -> None:
     assert FastDateTime().pythonvalue("2024-08-17 00:61:16Z") == datetime.datetime(
         2024, 8, 17, 1, 1, 16, tzinfo=datetime.timezone.utc
     )
-    assert FastDateTime().pythonvalue("2024-08-17 00:61:16") == datetime.datetime(
+    assert FastDateTime().pythonvalue("2024-08-17 00:61:16") == datetime.datetime(  # noqa: DTZ001
         2024, 8, 17, 1, 1, 16
     )
 
@@ -71,7 +71,7 @@ def test_fix_datetime_dash_separator() -> None:
     Regression test for
     https://github.com/openvideolibs/python-onvif-zeep-async/issues/99
     """
-    assert FastDateTime().pythonvalue("2010-01-01-00:00:00") == datetime.datetime(
+    assert FastDateTime().pythonvalue("2010-01-01-00:00:00") == datetime.datetime(  # noqa: DTZ001
         2010, 1, 1, 0, 0, 0
     )
     assert FastDateTime().pythonvalue("2010-01-01-00:00:00Z") == datetime.datetime(
