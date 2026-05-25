@@ -8,5 +8,10 @@ plugins = ["covdefaults"]
 [tool.ruff]
 target-version = "py310"
 
+[tool.ruff.lint]
+extend-select = [
+  "B", # flake8-bugbear
+]
+
 [build-system]
 requires = ['setuptools>=65.4.1', 'wheel']

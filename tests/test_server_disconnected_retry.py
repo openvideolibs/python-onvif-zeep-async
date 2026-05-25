@@ -288,7 +288,7 @@ async def test_no_retry_with_proper_connection_close(
         envelope = etree.Element("{http://test}TestRequest")
 
         # Make 3 requests - no retries should occur
-        for i in range(3):
+        for _ in range(3):
             result = await transport.post_xml(
                 f"{base_url}/onvif/device_service", envelope, {}
             )
