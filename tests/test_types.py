@@ -65,6 +65,27 @@ def test_fix_datetime_missing_t() -> None:
     )
 
 
+def test_fix_datetime_dash_separator() -> None:
+    """Some cameras use - instead of T as the date/time separator.
+
+    Regression test for
+    https://github.com/openvideolibs/python-onvif-zeep-async/issues/99
+    """
+    assert FastDateTime().pythonvalue("2010-01-01-00:00:00") == datetime.datetime(
+        2010, 1, 1, 0, 0, 0
+    )
+    assert FastDateTime().pythonvalue("2010-01-01-00:00:00Z") == datetime.datetime(
+        2010, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc
+    )
+
+
+def test_fix_datetime_stray_dash_after_t() -> None:
+    """Some cameras emit a stray - right after the T separator."""
+    assert FastDateTime().pythonvalue("2023-05-15T-07:10:32Z") == datetime.datetime(
+        2023, 5, 15, 7, 10, 32, tzinfo=datetime.timezone.utc
+    )
+
+
 def test_fix_datetime_overflow() -> None:
     assert FastDateTime().pythonvalue("2024-08-17T00:61:16Z") == datetime.datetime(
         2024, 8, 17, 1, 1, 16, tzinfo=datetime.timezone.utc

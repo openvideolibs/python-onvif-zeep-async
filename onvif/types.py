@@ -51,8 +51,9 @@ class FastDateTime(DateTime):
     def pythonvalue(self, value: str) -> datetime:
         """Convert the xml value into a python value."""
         if len(value) > 10 and value[10] == "-":  # 2010-01-01-00:00:00...
-            value[10] = "T"
-        if len(value) > 10 and value[11] == "-":  # 2023-05-15T-07:10:32Z...
+            # str is immutable, so rebuild it with T as the separator
+            value = value[:10] + "T" + value[11:]
+        if len(value) > 11 and value[11] == "-":  # 2023-05-15T-07:10:32Z...
             value = value[:11] + value[12:]
         # Determine based on the length of the value if it only contains a date
         # lazy hack ;-)
