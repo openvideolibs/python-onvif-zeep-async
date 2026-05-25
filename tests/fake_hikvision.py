@@ -32,13 +32,33 @@ WSU_NS = (
 )
 
 # Device service paths Hikvision cameras expose. Only the device service path is
-# fixed by the client; the others are advertised through GetCapabilities.
+# fixed by the client; the others are advertised through GetCapabilities/GetServices.
 DEVICE_SERVICE_PATH = "/onvif/device_service"
 MEDIA_SERVICE_PATH = "/onvif/Media"
 EVENTS_SERVICE_PATH = "/onvif/Events"
 IMAGING_SERVICE_PATH = "/onvif/Imaging"
 PTZ_SERVICE_PATH = "/onvif/PTZ"
 ANALYTICS_SERVICE_PATH = "/onvif/Analytics"
+# Recording/Replay/Search are nested under the Extension element in
+# GetCapabilities and so are not surfaced by the GetCapabilities parser; they
+# are only discoverable through GetServices.
+RECORDING_SERVICE_PATH = "/onvif/Recording"
+REPLAY_SERVICE_PATH = "/onvif/Replay"
+SEARCH_SERVICE_PATH = "/onvif/Search"
+
+# (namespace, service path) pairs advertised by GetServices. The full set a
+# modern device exposes, including the Extension-nested services above.
+_GET_SERVICES = (
+    ("http://www.onvif.org/ver10/device/wsdl", DEVICE_SERVICE_PATH),
+    ("http://www.onvif.org/ver10/media/wsdl", MEDIA_SERVICE_PATH),
+    ("http://www.onvif.org/ver10/events/wsdl", EVENTS_SERVICE_PATH),
+    ("http://www.onvif.org/ver20/imaging/wsdl", IMAGING_SERVICE_PATH),
+    ("http://www.onvif.org/ver20/ptz/wsdl", PTZ_SERVICE_PATH),
+    ("http://www.onvif.org/ver20/analytics/wsdl", ANALYTICS_SERVICE_PATH),
+    ("http://www.onvif.org/ver10/recording/wsdl", RECORDING_SERVICE_PATH),
+    ("http://www.onvif.org/ver10/replay/wsdl", REPLAY_SERVICE_PATH),
+    ("http://www.onvif.org/ver10/search/wsdl", SEARCH_SERVICE_PATH),
+)
 
 
 def _soap_envelope(body: str) -> str:
@@ -120,6 +140,10 @@ class FakeHikvisionCamera:
     utc_minute: int = 30
     utc_second: int = 45
     require_auth: bool = False
+    # When True, GetServices answers with a SOAP fault, simulating an older
+    # device that does not implement it. The client must then fall back to
+    # GetCapabilities for service discovery.
+    broken_get_services: bool = False
     # PullPoint subscription timestamps. Hikvision firmware famously emits an
     # xs:dateTime using "-" as the date/time separator (e.g. 2024-08-17-12:30:45Z)
     # which only parses thanks to FastDateTime (see issue #178). The defaults
@@ -168,6 +192,20 @@ class FakeHikvisionCamera:
             f"<tt:XAddr>{base}{PTZ_SERVICE_PATH}</tt:XAddr>"
             "</tt:PTZ>"
             "</tds:Capabilities></tds:GetCapabilitiesResponse>"
+        )
+
+    def _get_services_response(self) -> str:
+        base = self.base_url
+        entries = "".join(
+            "<tds:Service>"
+            f"<tds:Namespace>{ns}</tds:Namespace>"
+            f"<tds:XAddr>{base}{path}</tds:XAddr>"
+            "<tds:Version><tt:Major>2</tt:Major><tt:Minor>5</tt:Minor></tds:Version>"
+            "</tds:Service>"
+            for ns, path in _GET_SERVICES
+        )
+        return _soap_envelope(
+            f"<tds:GetServicesResponse>{entries}</tds:GetServicesResponse>"
         )
 
     def _device_information_response(self) -> str:
@@ -224,7 +262,12 @@ class FakeHikvisionCamera:
         )
 
     def _response_for(self, operation: str) -> str | None:
+        if operation == "GetServices" and self.broken_get_services:
+            # Simulate a device without GetServices: returning None makes the
+            # handler emit a SOAP fault, exercising the GetCapabilities fallback.
+            return None
         builders = {
+            "GetServices": self._get_services_response,
             "GetCapabilities": self._capabilities_response,
             "GetDeviceInformation": self._device_information_response,
             "GetSystemDateAndTime": self._system_date_and_time_response,

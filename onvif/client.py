@@ -455,38 +455,152 @@ class ONVIFCamera:
         self._snapshot_connector = TCPConnector(ssl=_NO_VERIFY_SSL_CONTEXT)
         self._snapshot_client = ClientSession(connector=self._snapshot_connector)
 
-    async def get_capabilities(self) -> dict[str, Any]:
-        """Get device capabilities."""
+    async def get_capabilities(self) -> dict[str, Any] | None:
+        """Get device capabilities.
+
+        Returns the parsed GetCapabilities structure, or ``None`` if the device
+        returned a payload that could not be serialized -- capabilities parsing
+        is best-effort and swallows serialization errors (see
+        ``_update_xaddrs_from_capabilities``).
+        """
         if self._capabilities is None:
-            await self.update_xaddrs()
+            # update_xaddrs() prefers GetServices, which does not return the
+            # Category-keyed capabilities structure, so fetch GetCapabilities
+            # here on demand to populate self._capabilities. _devicemgmt_with_time()
+            # reproduces the adjust_time clock-skew compensation update_xaddrs()
+            # performs, so a caller invoking get_capabilities() first on a
+            # clock-skewed camera still signs GetCapabilities with an adjusted
+            # timestamp.
+            devicemgmt = await self._devicemgmt_with_time()
+            await self._update_xaddrs_from_capabilities(devicemgmt)
         return self._capabilities
 
     async def update_xaddrs(self):
         """Update xaddrs for services."""
         self.dt_diff = None
-        devicemgmt = await self.create_devicemgmt_service()
-        if self.adjust_time:
-            try:
-                sys_date = await devicemgmt.authless_GetSystemDateAndTime()
-            except zeep.exceptions.Fault:
-                # Looks like we should try with auth
-                sys_date = await devicemgmt.GetSystemDateAndTime()
-            cdate = sys_date.UTCDateTime
-            cam_date = dt.datetime(
-                cdate.Date.Year,
-                cdate.Date.Month,
-                cdate.Date.Day,
-                cdate.Time.Hour,
-                cdate.Time.Minute,
-                cdate.Time.Second,
-            )
-            self.dt_diff = cam_date - dt.datetime.utcnow()
-            await devicemgmt.close()
-            del self.services[devicemgmt.binding_key]
-            devicemgmt = await self.create_devicemgmt_service()
+        devicemgmt = await self._devicemgmt_with_time()
 
-        # Get XAddr of services on the device
+        # Get XAddr of services on the device.
+        #
+        # Prefer GetServices -- the ONVIF-recommended discovery method that
+        # returns every service the device exposes (recording, replay, search,
+        # receiver, deviceio, ...), not just the top-level subset advertised by
+        # GetCapabilities. Fall back to GetCapabilities only when GetServices is
+        # unsupported or returns nothing, which keeps older devices working and
+        # avoids a redundant second round-trip on modern ones. self._capabilities
+        # is populated lazily by get_capabilities() since GetServices does not
+        # return the Category-keyed capabilities structure.
+        # See https://github.com/openvideolibs/python-onvif-zeep-async/issues/97
         self.xaddrs = {}
+        if not await self._update_xaddrs_from_services(devicemgmt):
+            await self._update_xaddrs_from_capabilities(devicemgmt)
+
+    async def _devicemgmt_with_time(self) -> ONVIFService:
+        """Create the devicemgmt service with clock-skew compensation applied.
+
+        Shared prologue for ``update_xaddrs()`` and ``get_capabilities()``: both
+        need a devicemgmt service whose WS-Security timestamps account for the
+        device clock offset. The ``adjust_time`` handshake runs only when
+        ``dt_diff`` has not been computed yet, so calling this from
+        ``get_capabilities()`` after ``update_xaddrs()`` does not repeat the
+        round-trip. ``update_xaddrs()`` resets ``dt_diff`` to ``None`` first, so
+        it always (re)runs the handshake. A no-op when ``adjust_time`` is
+        disabled. Returns the devicemgmt service the caller should continue to use.
+        """
+        devicemgmt = await self.create_devicemgmt_service()
+        if self.dt_diff is None:
+            devicemgmt = await self._adjust_time(devicemgmt)
+        return devicemgmt
+
+    async def _adjust_time(self, devicemgmt: ONVIFService) -> ONVIFService:
+        """Compute the device clock offset and recreate the devicemgmt service.
+
+        When ``adjust_time`` is enabled, query the device's system clock and
+        store its offset from the host clock in ``self.dt_diff`` so subsequent
+        WS-Security timestamps compensate for clock skew (some cameras reject
+        requests whose ``Created`` timestamp drifts too far from their own). The
+        devicemgmt service is recreated afterwards so it is rebuilt with the
+        freshly computed ``dt_diff``. A no-op when ``adjust_time`` is disabled.
+
+        Called via ``_devicemgmt_with_time()`` so the clock-skew handshake
+        happens regardless of whether ``update_xaddrs()`` or
+        ``get_capabilities()`` runs first. Returns the devicemgmt service the
+        caller should continue to use.
+        """
+        if not self.adjust_time:
+            return devicemgmt
+        try:
+            sys_date = await devicemgmt.authless_GetSystemDateAndTime()
+        except zeep.exceptions.Fault:
+            # Looks like we should try with auth
+            sys_date = await devicemgmt.GetSystemDateAndTime()
+        cdate = sys_date.UTCDateTime
+        cam_date = dt.datetime(
+            cdate.Date.Year,
+            cdate.Date.Month,
+            cdate.Date.Day,
+            cdate.Time.Hour,
+            cdate.Time.Minute,
+            cdate.Time.Second,
+        )
+        self.dt_diff = cam_date - dt.datetime.utcnow()
+        await devicemgmt.close()
+        del self.services[devicemgmt.binding_key]
+        return await self.create_devicemgmt_service()
+
+    async def _update_xaddrs_from_services(self, devicemgmt: ONVIFService) -> bool:
+        """Populate XAddrs from GetServices.
+
+        GetServices is the ONVIF-recommended discovery method and returns every
+        service the device exposes -- far more complete than GetCapabilities.
+        Older devices may not implement it; a failure or empty response here is
+        non-fatal and signals the caller to fall back to GetCapabilities.
+
+        Returns True if at least one XAddr was discovered, False otherwise.
+        """
+        try:
+            services = await devicemgmt.GetServices({"IncludeCapability": False})
+        except (ONVIFError, zeep.exceptions.Fault) as err:
+            # An unsupported GetServices raises zeep.exceptions.Fault directly
+            # when awaited -- safe_func only wraps the synchronous request build,
+            # not the await -- while other failures surface as ONVIFError (which
+            # ONVIFTimeoutError subclasses). Either case is non-fatal: log the
+            # underlying error so unexpected failures stay visible, and let the
+            # caller fall back to GetCapabilities.
+            logger.debug(
+                "%s: Could not get services via GetServices: %s", self.host, err
+            )
+            return False
+        found = False
+        for service in services or []:
+            try:
+                namespace = service.Namespace
+                xaddr = service.XAddr
+            except AttributeError:
+                # Skipping malformed entries is expected, handled behaviour, so
+                # log at debug with host and entry detail rather than emitting a
+                # full traceback per bad entry (noisy in production).
+                logger.debug(
+                    "%s: Skipping malformed service entry from GetServices: %r",
+                    self.host,
+                    service,
+                )
+                continue
+            if namespace and xaddr:
+                self.xaddrs[namespace] = normalize_url(xaddr)
+                found = True
+        return found
+
+    async def _update_xaddrs_from_capabilities(self, devicemgmt: ONVIFService) -> None:
+        """Populate XAddrs and capabilities from GetCapabilities.
+
+        GetCapabilities only advertises the top-level services
+        (Analytics/Device/Events/Imaging/Media/PTZ); services nested under the
+        Extension element (recording, replay, search, ...) are not discoverable
+        here -- those come from GetServices. This is the fallback for devices
+        that do not implement GetServices and is also the only source for
+        self._capabilities, which GetServices does not return.
+        """
         capabilities = await devicemgmt.GetCapabilities({"Category": "All"})
         for name in capabilities:
             capability = capabilities[name]
