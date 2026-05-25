@@ -496,10 +496,40 @@ class ONVIFCamera:
                     self.xaddrs[namespace] = normalize_url(capability["XAddr"])
             except Exception:
                 logger.exception("Unexpected service type")
+        # GetCapabilities only advertises a subset of services at the top level
+        # (Analytics/Device/Events/Imaging/Media/PTZ). Services such as
+        # recording, replay, search, receiver and deviceio are reported via
+        # GetServices instead (or nested under the Extension element), so query
+        # GetServices -- the ONVIF-recommended discovery method -- to populate
+        # their XAddrs. See https://github.com/openvideolibs/python-onvif-zeep-async/issues/97
+        await self._update_xaddrs_from_services(devicemgmt)
         try:
             self._capabilities = self.to_dict(capabilities)
         except Exception:
             logger.exception("Failed to parse capabilities")
+
+    async def _update_xaddrs_from_services(self, devicemgmt: ONVIFService) -> None:
+        """Populate XAddrs from GetServices.
+
+        GetServices returns every service the device exposes, which is more
+        complete than GetCapabilities. Older devices may not implement it, so
+        a failure here is non-fatal -- the XAddrs already gathered from
+        GetCapabilities are left untouched.
+        """
+        try:
+            services = await devicemgmt.GetServices({"IncludeCapability": False})
+        except Exception:
+            logger.debug("%s: GetServices is not supported", self.host)
+            return
+        for service in services or []:
+            try:
+                namespace = service.Namespace
+                xaddr = service.XAddr
+            except AttributeError:
+                logger.exception("Unexpected service entry from GetServices")
+                continue
+            if namespace and xaddr:
+                self.xaddrs[namespace] = normalize_url(xaddr)
 
     def has_broken_relative_time(
         self,
