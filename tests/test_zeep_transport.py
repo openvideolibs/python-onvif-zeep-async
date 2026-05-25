@@ -185,7 +185,7 @@ async def test_timeout_handling():
 
     transport.session = mock_session
 
-    with pytest.raises(TimeoutError, match="Request to .* timed out"):
+    with pytest.raises(TimeoutError, match=r"Request to .* timed out"):
         await transport.post(
             "http://example.com/service", "<request>test</request>", {}
         )

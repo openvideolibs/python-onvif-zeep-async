@@ -14,8 +14,15 @@ extend-select = [
   "DTZ", # flake8-datetimez
   "EM", # flake8-errmsg
   "I", # isort
+  "RUF", # ruff-specific
   "SIM", # flake8-simplify
   "TC", # flake8-type-checking
+]
+ignore = [
+  # Re-enable once the rules these noqa directives reference (S, A, F841) are
+  # selected; until then RUF100 would force deleting noqa comments we'll need
+  # back.
+  "RUF100",
 ]
 
 [build-system]
