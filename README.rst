@@ -3,6 +3,11 @@ python-onvif-zeep-async
 
 ONVIF Client Implementation in Python 3
 
+Documentation
+-------------
+* `Source code and issue tracker <https://github.com/openvideolibs/python-onvif-zeep-async>`_
+* `PyPI package <https://pypi.org/project/onvif-zeep-async/>`_
+
 Dependencies
 ------------
 `zeep[async] <http://docs.python-zeep.org>`_ >= 4.1.0, < 5.0.0
