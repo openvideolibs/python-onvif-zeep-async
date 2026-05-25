@@ -1,0 +1,459 @@
+"""Unit tests for :mod:`onvif.client`.
+
+These cover the parts of :class:`~onvif.client.ONVIFCamera`,
+:class:`~onvif.client.ONVIFService` and :class:`~onvif.client.ZeepAsyncClient`
+that are pure logic or thin wrappers -- service-definition resolution, the
+broken-relative-timestamp heuristic, termination-time formatting, the manager
+factories and the per-service creation helpers -- without any network or WSDL
+loading. The zeep/aiohttp dependencies they delegate to are mocked.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import os
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+
+import onvif.client
+from onvif import ONVIFCamera
+from onvif.client import ONVIFService, ZeepAsyncClient
+from onvif.exceptions import ONVIFError
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+# The bundled WSDL files live under onvif/wsdl, not the default _WSDL_PATH
+# (which points one level above the package). Resolve the real directory so the
+# get_definition() tests can exercise the on-disk path checks.
+_REAL_WSDL_DIR = os.path.join(os.path.dirname(onvif.client.__file__), "wsdl")
+
+
+@asynccontextmanager
+async def create_test_camera(
+    host: str = "192.168.1.100",
+    port: int = 80,
+    user: str | None = "admin",
+    passwd: str | None = "password",  # noqa: S107
+    wsdl_dir: str = _REAL_WSDL_DIR,
+) -> AsyncGenerator[ONVIFCamera]:
+    """Create a test camera instance with context manager."""
+    cam = ONVIFCamera(host, port, user, passwd, wsdl_dir=wsdl_dir)
+    try:
+        yield cam
+    finally:
+        await cam.close()
+
+
+# --------------------------------------------------------------------------
+# ZeepAsyncClient.create_service
+# --------------------------------------------------------------------------
+
+
+def test_create_service_unknown_binding_raises_value_error() -> None:
+    """create_service raises ValueError when the binding QName is unknown."""
+    client = ZeepAsyncClient.__new__(ZeepAsyncClient)
+    client.wsdl = Mock()
+    client.wsdl.bindings = {}
+
+    with pytest.raises(ValueError, match="No binding found"):
+        client.create_service("{ns}Missing", "http://example.com")
+
+
+# --------------------------------------------------------------------------
+# ONVIFService
+# --------------------------------------------------------------------------
+
+
+def test_onvif_service_missing_wsdl_raises() -> None:
+    """Constructing a service with a missing WSDL file raises ONVIFError."""
+    with pytest.raises(ONVIFError):
+        ONVIFService(
+            "http://example.com",
+            "admin",
+            "password",
+            "/nonexistent/does-not-exist.wsdl",
+        )
+
+
+def test_service_wrapper_falls_back_to_positional_args() -> None:
+    """A service op that rejects keyword args is retried with positional args."""
+    service = ONVIFService.__new__(ONVIFService)
+
+    def operation(*args, **kwargs):
+        if kwargs:
+            msg = "keyword arguments not accepted"
+            raise TypeError(msg)
+        return ("positional", args)
+
+    ws_client = Mock()
+    ws_client.SomeOperation = operation
+    service.ws_client = ws_client
+
+    result = service.SomeOperation({"Foo": "bar"})
+
+    assert result == ("positional", ({"Foo": "bar"},))
+
+
+def test_service_wrapper_no_params() -> None:
+    """Calling a service op with no params invokes the underlying op with none."""
+    service = ONVIFService.__new__(ONVIFService)
+    ws_client = Mock()
+    ws_client.GetThing = Mock(return_value="ok")
+    service.ws_client = ws_client
+
+    result = service.GetThing()
+
+    assert result == "ok"
+    ws_client.GetThing.assert_called_once_with()
+
+
+def test_getattr_unknown_dunder_raises_key_error() -> None:
+    """Accessing an unset dunder attribute raises KeyError (not a wrapper)."""
+    service = ONVIFService.__new__(ONVIFService)
+    with pytest.raises(KeyError):
+        service.__not_a_real_dunder__  # noqa: B018
+
+
+# --------------------------------------------------------------------------
+# ONVIFCamera.has_broken_relative_time
+# --------------------------------------------------------------------------
+
+
+def _make_bare_camera() -> ONVIFCamera:
+    """Build an ONVIFCamera with only the attributes the pure methods touch."""
+    cam = ONVIFCamera.__new__(ONVIFCamera)
+    cam.host = "1.2.3.4"
+    cam.port = 80
+    cam.wsdl_dir = _REAL_WSDL_DIR
+    cam.xaddrs = {}
+    cam.dt_diff = None
+    cam._has_broken_relative_timestamps = False
+    return cam
+
+
+def _utc(*args: int) -> dt.datetime:
+    """Build a timezone-aware UTC datetime."""
+    return dt.datetime(*args, tzinfo=dt.timezone.utc)
+
+
+def _naive(*args: int) -> dt.datetime:
+    """Build a naive datetime (no timezone info)."""
+    return _utc(*args).replace(tzinfo=None)
+
+
+def test_has_broken_relative_time_no_current_time() -> None:
+    """Returns False when the device reports no current time."""
+    cam = _make_bare_camera()
+    assert (
+        cam.has_broken_relative_time(dt.timedelta(seconds=60), None, _utc(2024, 1, 1))
+        is False
+    )
+
+
+def test_has_broken_relative_time_no_termination_time() -> None:
+    """Returns False when the device reports no termination time."""
+    cam = _make_bare_camera()
+    assert (
+        cam.has_broken_relative_time(dt.timedelta(seconds=60), _utc(2024, 1, 1), None)
+        is False
+    )
+
+
+def test_has_broken_relative_time_current_time_naive() -> None:
+    """Returns False when the current time has no timezone info."""
+    cam = _make_bare_camera()
+    assert (
+        cam.has_broken_relative_time(
+            dt.timedelta(seconds=60), _naive(2024, 1, 1), _utc(2024, 1, 1)
+        )
+        is False
+    )
+
+
+def test_has_broken_relative_time_termination_time_naive() -> None:
+    """Returns False when the termination time has no timezone info."""
+    cam = _make_bare_camera()
+    assert (
+        cam.has_broken_relative_time(
+            dt.timedelta(seconds=60), _utc(2024, 1, 1), _naive(2024, 1, 1)
+        )
+        is False
+    )
+
+
+def test_has_broken_relative_time_detected() -> None:
+    """A too-short actual interval flags broken timestamps and returns True."""
+    cam = _make_bare_camera()
+    current = _utc(2024, 1, 1, 0, 0, 0)
+    termination = _utc(2024, 1, 1, 0, 0, 10)
+    result = cam.has_broken_relative_time(
+        dt.timedelta(seconds=60), current, termination
+    )
+    assert result is True
+    assert cam._has_broken_relative_timestamps is True
+
+
+def test_has_broken_relative_time_ok() -> None:
+    """A correct interval keeps timestamps relative and returns False."""
+    cam = _make_bare_camera()
+    current = _utc(2024, 1, 1, 0, 0, 0)
+    termination = _utc(2024, 1, 1, 0, 1, 0)
+    result = cam.has_broken_relative_time(
+        dt.timedelta(seconds=60), current, termination
+    )
+    assert result is False
+    assert cam._has_broken_relative_timestamps is False
+
+
+# --------------------------------------------------------------------------
+# ONVIFCamera.get_next_termination_time
+# --------------------------------------------------------------------------
+
+
+def test_get_next_termination_time_relative() -> None:
+    """Default (non-broken) timestamps yield an ISO 8601 duration."""
+    cam = _make_bare_camera()
+    assert cam.get_next_termination_time(dt.timedelta(seconds=90)) == "PT90S"
+
+
+def test_get_next_termination_time_absolute_with_dt_diff() -> None:
+    """Broken timestamps yield a Zulu absolute time including dt_diff offset."""
+    cam = _make_bare_camera()
+    cam._has_broken_relative_timestamps = True
+    cam.dt_diff = dt.timedelta(seconds=5)
+
+    fixed_now = dt.datetime(2024, 1, 1, 0, 0, 0, tzinfo=dt.timezone.utc)
+    with patch("onvif.client.utcnow", return_value=fixed_now):
+        result = cam.get_next_termination_time(dt.timedelta(seconds=60))
+
+    # 00:00:00 + 60s duration + 5s dt_diff = 00:01:05, formatted as Zulu.
+    assert result == "2024-01-01T00:01:05Z"
+
+
+# --------------------------------------------------------------------------
+# Manager factories
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_pullpoint_manager() -> None:
+    """create_pullpoint_manager builds a manager and starts it."""
+    async with create_test_camera() as cam:
+        with patch("onvif.client.PullPointManager") as mock_manager:
+            instance = mock_manager.return_value
+            instance.start = AsyncMock()
+            callback = Mock()
+            interval = dt.timedelta(seconds=60)
+
+            result = await cam.create_pullpoint_manager(interval, callback)
+
+            assert result is instance
+            mock_manager.assert_called_once_with(cam, interval, callback)
+            instance.start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_notification_manager() -> None:
+    """create_notification_manager builds a manager and starts it."""
+    async with create_test_camera() as cam:
+        with patch("onvif.client.NotificationManager") as mock_manager:
+            instance = mock_manager.return_value
+            instance.start = AsyncMock()
+            callback = Mock()
+            interval = dt.timedelta(seconds=60)
+
+            result = await cam.create_notification_manager(
+                "http://example.com/notify", interval, callback
+            )
+
+            assert result is instance
+            mock_manager.assert_called_once_with(
+                cam, "http://example.com/notify", interval, callback
+            )
+            instance.start.assert_awaited_once()
+
+
+# --------------------------------------------------------------------------
+# ONVIFCamera.get_definition
+# --------------------------------------------------------------------------
+
+
+def test_get_definition_unknown_service() -> None:
+    """An unknown service name raises ONVIFError."""
+    cam = _make_bare_camera()
+    with pytest.raises(ONVIFError, match="Unknown service"):
+        cam.get_definition("not_a_service")
+
+
+def test_get_definition_missing_wsdl_file() -> None:
+    """A service whose WSDL file is absent raises ONVIFError."""
+    cam = _make_bare_camera()
+    cam.wsdl_dir = "/nonexistent-wsdl-dir"
+    with pytest.raises(ONVIFError, match="No such file"):
+        cam.get_definition("media")
+
+
+def test_get_definition_devicemgmt_fixed_xaddr() -> None:
+    """devicemgmt resolves to the fixed /onvif/device_service xaddr."""
+    cam = _make_bare_camera()
+    xaddr, wsdlpath, binding_name = cam.get_definition("devicemgmt")
+    assert xaddr == "http://1.2.3.4:80/onvif/device_service"
+    assert wsdlpath.endswith("devicemgmt.wsdl")
+    assert "DeviceBinding" in binding_name
+
+
+def test_get_definition_with_port_type() -> None:
+    """A port_type is appended to the namespace used for the xaddr lookup."""
+    cam = _make_bare_camera()
+    namespace = "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
+    cam.xaddrs[namespace] = "http://1.2.3.4/onvif/pullpoint"
+
+    xaddr, wsdlpath, binding_name = cam.get_definition(
+        "pullpoint", port_type="PullPointSubscription"
+    )
+
+    assert xaddr == "http://1.2.3.4/onvif/pullpoint"
+    assert wsdlpath.endswith("events.wsdl")
+
+
+def test_get_definition_unsupported_service_without_xaddr() -> None:
+    """A known service with no discovered xaddr raises ONVIFError."""
+    cam = _make_bare_camera()
+    with pytest.raises(ONVIFError, match="doesn`t support service"):
+        cam.get_definition("media")
+
+
+# --------------------------------------------------------------------------
+# ONVIFCamera.create_onvif_service
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_onvif_service_returns_cached_when_xaddr_unchanged() -> None:
+    """An existing service with the same xaddr is reused, not recreated."""
+    async with create_test_camera() as cam:
+        existing = Mock()
+        existing.xaddr = "http://1.2.3.4/onvif/media"
+        existing.close = AsyncMock()
+        cam.services[("media", None)] = existing
+
+        with patch.object(
+            cam,
+            "get_definition",
+            return_value=("http://1.2.3.4/onvif/media", "media.wsdl", "{ns}Binding"),
+        ):
+            result = await cam.create_onvif_service("media")
+
+        assert result is existing
+
+
+@pytest.mark.asyncio
+async def test_create_onvif_service_recreates_when_xaddr_changes() -> None:
+    """An existing service with a stale xaddr is closed and recreated."""
+    async with create_test_camera() as cam:
+        existing = Mock()
+        existing.xaddr = "http://old-address/onvif/media"
+        existing.close = AsyncMock()
+        cam.services[("media", None)] = existing
+
+        new_service = Mock()
+        new_service.setup = AsyncMock()
+        new_service.close = AsyncMock()
+
+        with (
+            patch.object(
+                cam,
+                "get_definition",
+                return_value=(
+                    "http://new-address/onvif/media",
+                    "media.wsdl",
+                    "{ns}Binding",
+                ),
+            ),
+            patch("onvif.client.ONVIFService", return_value=new_service),
+        ):
+            result = await cam.create_onvif_service("media")
+
+        existing.close.assert_awaited_once()
+        new_service.setup.assert_awaited_once()
+        assert result is new_service
+        assert cam.services[("media", None)] is new_service
+
+
+# --------------------------------------------------------------------------
+# Per-service creation helpers
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "expected_args", "expected_kwargs"),
+    [
+        ("create_devicemgmt_service", ("devicemgmt",), {}),
+        ("create_media_service", ("media",), {}),
+        ("create_ptz_service", ("ptz",), {}),
+        ("create_imaging_service", ("imaging",), {}),
+        ("create_deviceio_service", ("deviceio",), {}),
+        ("create_events_service", ("events",), {}),
+        ("create_analytics_service", ("analytics",), {}),
+        ("create_recording_service", ("recording",), {}),
+        ("create_search_service", ("search",), {}),
+        ("create_replay_service", ("replay",), {}),
+        ("create_notification_service", ("notification",), {}),
+        ("create_receiver_service", ("receiver",), {}),
+    ],
+)
+async def test_create_service_helpers(
+    method_name: str,
+    expected_args: tuple,
+    expected_kwargs: dict,
+) -> None:
+    """Each create_*_service helper delegates to create_onvif_service."""
+    async with create_test_camera() as cam:
+        sentinel = Mock()
+        with patch.object(
+            cam, "create_onvif_service", new=AsyncMock(return_value=sentinel)
+        ) as mock_create:
+            result = await getattr(cam, method_name)()
+
+        assert result is sentinel
+        mock_create.assert_awaited_once_with(*expected_args, **expected_kwargs)
+
+
+@pytest.mark.asyncio
+async def test_create_pullpoint_service_uses_pullpoint_timeouts() -> None:
+    """create_pullpoint_service passes the pullpoint port type and timeouts."""
+    async with create_test_camera() as cam:
+        sentinel = Mock()
+        with patch.object(
+            cam, "create_onvif_service", new=AsyncMock(return_value=sentinel)
+        ) as mock_create:
+            result = await cam.create_pullpoint_service()
+
+        assert result is sentinel
+        mock_create.assert_awaited_once_with(
+            "pullpoint",
+            port_type="PullPointSubscription",
+            read_timeout=onvif.client._PULLPOINT_TIMEOUT,
+            write_timeout=onvif.client._PULLPOINT_TIMEOUT,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_subscription_service_passes_port_type() -> None:
+    """create_subscription_service forwards the optional port_type."""
+    async with create_test_camera() as cam:
+        sentinel = Mock()
+        with patch.object(
+            cam, "create_onvif_service", new=AsyncMock(return_value=sentinel)
+        ) as mock_create:
+            result = await cam.create_subscription_service("SomePortType")
+
+        assert result is sentinel
+        mock_create.assert_awaited_once_with(
+            "subscription", port_type="SomePortType"
+        )
