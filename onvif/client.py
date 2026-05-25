@@ -76,6 +76,13 @@ class UsernameDigestTokenDtDiff(UsernameToken):
     """
 
     def __init__(self, user, passw, dt_diff=None, **kwargs):
+        # ONVIF / WS-Security UsernameToken Profile requires the Created
+        # timestamp (and the timestamp folded into the password digest) to be
+        # in canonical UTC "Zulu" form, e.g. 2024-01-01T00:00:00Z. zeep emits a
+        # numeric "+00:00" offset by default, which some camera firmwares
+        # (notably Hikvision) reject, causing digest auth to fail. Default to
+        # Zulu timestamps unless the caller explicitly overrides.
+        kwargs.setdefault("zulu_timestamp", True)
         super().__init__(user, passw, **kwargs)
         # Date/time difference in datetime.timedelta
         self.dt_diff = dt_diff
