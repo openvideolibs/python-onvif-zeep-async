@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
-from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
@@ -21,6 +21,9 @@ from fake_hikvision import WSSE_NS, FakeHikvisionCamera
 
 import onvif
 from onvif import ONVIFCamera
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 WSDL_DIR = os.path.join(os.path.dirname(onvif.__file__), "wsdl")
 DIGEST_TYPE = (

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
-from collections.abc import AsyncGenerator, Generator
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
@@ -17,6 +17,9 @@ from lxml import etree
 import onvif
 from onvif.client import AsyncTransportProtocolErrorHandler, ONVIFService
 from onvif.zeep_aiohttp import AIOHTTPTransport
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Generator
 
 
 @pytest.fixture

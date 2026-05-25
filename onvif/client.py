@@ -6,14 +6,11 @@ import asyncio
 import datetime as dt
 import logging
 import os.path
-from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import aiohttp
-import httpx
 import zeep.helpers
 from aiohttp import BasicAuth, ClientSession, DigestAuthMiddleware, TCPConnector
-from requests import Response
 from zeep.cache import SqliteCache
 from zeep.client import AsyncClient as BaseZeepAsyncClient
 from zeep.proxy import AsyncServiceProxy
@@ -39,6 +36,12 @@ from .util import (
 from .wrappers import retry_connection_error
 from .wsa import WsAddressingIfMissingPlugin
 from .zeep_aiohttp import AIOHTTPTransport
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import httpx
+    from requests import Response
 
 logger = logging.getLogger("onvif")
 logging.basicConfig(level=logging.INFO)

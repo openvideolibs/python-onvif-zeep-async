@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -14,6 +14,9 @@ from zeep.exceptions import Fault
 import onvif
 from onvif import ONVIFCamera
 from onvif.exceptions import ONVIFError
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 WSDL_DIR = os.path.join(os.path.dirname(onvif.__file__), "wsdl")
 

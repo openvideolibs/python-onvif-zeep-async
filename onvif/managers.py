@@ -6,13 +6,11 @@ import asyncio
 import datetime as dt
 import logging
 from abc import abstractmethod
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
-from zeep.wsdl.bindings.soap import SoapOperation
 
 from onvif.exceptions import ONVIFError
 
@@ -36,6 +34,10 @@ SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 MINIMUM_SUBSCRIPTION_SECONDS = 60.0
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from zeep.wsdl.bindings.soap import SoapOperation
+
     from onvif.client import ONVIFCamera, ONVIFService
 
 
