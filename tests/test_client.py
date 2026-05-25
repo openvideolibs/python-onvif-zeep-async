@@ -454,6 +454,4 @@ async def test_create_subscription_service_passes_port_type() -> None:
             result = await cam.create_subscription_service("SomePortType")
 
         assert result is sentinel
-        mock_create.assert_awaited_once_with(
-            "subscription", port_type="SomePortType"
-        )
+        mock_create.assert_awaited_once_with("subscription", port_type="SomePortType")
