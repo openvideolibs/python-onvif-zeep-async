@@ -13,6 +13,7 @@ extend-select = [
   "B", # flake8-bugbear
   "DTZ", # flake8-datetimez
   "I", # isort
+  "TC", # flake8-type-checking
 ]
 
 [build-system]

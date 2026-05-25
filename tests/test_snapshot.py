@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
@@ -13,6 +13,9 @@ from aioresponses import aioresponses
 
 from onvif import ONVIFCamera
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 
 @pytest.fixture
