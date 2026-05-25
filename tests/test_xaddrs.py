@@ -254,3 +254,50 @@ async def test_update_xaddrs_skips_malformed_service_entries(
     assert REPLAY_NS not in camera.xaddrs
     # One good entry means GetServices "succeeded" -- no fallback round-trip.
     devicemgmt.GetCapabilities.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_xaddrs_adjust_time_retries_with_auth_on_fault() -> None:
+    """adjust_time retries the clock probe with auth when the authless call faults.
+
+    Cameras that reject the unauthenticated GetSystemDateAndTime probe answer
+    with a zeep Fault; the adjust_time handshake must then retry the call with
+    credentials rather than abort. Covers the authless->Fault->authenticated
+    fallback in the clock-skew handshake.
+    """
+    cam = ONVIFCamera(
+        "192.168.1.100",
+        80,
+        "admin",
+        "password",  # noqa: S106
+        wsdl_dir=WSDL_DIR,
+        adjust_time=True,
+    )
+    sys_date = Mock()
+    sys_date.UTCDateTime = Mock(
+        Date=Mock(Year=2024, Month=8, Day=17),
+        Time=Mock(Hour=12, Minute=30, Second=45),
+    )
+    devicemgmt = _mock_devicemgmt()
+    devicemgmt.binding_key = "devicemgmt"
+    # The authless probe faults (camera demands auth); the authenticated retry
+    # then succeeds and supplies the device clock.
+    devicemgmt.authless_GetSystemDateAndTime = AsyncMock(side_effect=Fault("auth"))
+    devicemgmt.GetSystemDateAndTime = AsyncMock(return_value=sys_date)
+    cam.services[devicemgmt.binding_key] = devicemgmt
+
+    try:
+        with patch.object(
+            cam, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+        ):
+            await cam.update_xaddrs()
+    finally:
+        await cam.close()
+
+    # The authless probe faulted, so the handshake retried with credentials...
+    devicemgmt.authless_GetSystemDateAndTime.assert_awaited_once()
+    devicemgmt.GetSystemDateAndTime.assert_awaited_once()
+    # ...and the device clock offset was still computed.
+    assert cam.dt_diff is not None
+    # Discovery then proceeded normally via GetServices.
+    assert cam.xaddrs[RECORDING_NS] == "http://192.168.1.100/onvif/recording_service"
