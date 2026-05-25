@@ -70,6 +70,9 @@ async def run(args):
 
         pullpoint = manager.get_service()
         print("waiting for messages...")
+        # The library retries a transient ServerDisconnectedError once
+        # internally (RFC 2616 section 8.1.4), so callers can issue a single
+        # PullMessages without catching disconnects themselves.
         messages = await pullpoint.PullMessages(
             {
                 "MessageLimit": 100,

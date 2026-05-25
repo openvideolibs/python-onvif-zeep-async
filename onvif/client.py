@@ -300,17 +300,14 @@ class ONVIFService:
                 sock_read=read_timeout or _READ_TIMEOUT,
             ),
         )
-        self.transport = (
-            AsyncTransportProtocolErrorHandler(
-                session=self._session,
-                verify_ssl=False,
-            )
-            if no_cache
-            else AIOHTTPTransport(
-                session=self._session,
-                verify_ssl=False,
-                cache=SqliteCache(),
-            )
+        # Always use the retry-on-disconnect transport. RFC 2616 section 8.1.4
+        # allows the server to close the connection at any time, and cameras
+        # routinely do so between event polls. The cache only affects WSDL
+        # loading, so it is orthogonal to the connection-error retry.
+        self.transport = AsyncTransportProtocolErrorHandler(
+            session=self._session,
+            verify_ssl=False,
+            cache=None if no_cache else SqliteCache(),
         )
         self.document: Document | None = None
         self.zeep_client_authless: ZeepAsyncClient | None = None

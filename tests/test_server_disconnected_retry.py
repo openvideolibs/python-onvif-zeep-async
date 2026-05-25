@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
 from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
@@ -13,7 +14,8 @@ import pytest_asyncio
 from aiohttp import ClientSession, web
 from lxml import etree
 
-from onvif.client import AsyncTransportProtocolErrorHandler
+import onvif
+from onvif.client import AsyncTransportProtocolErrorHandler, ONVIFService
 from onvif.zeep_aiohttp import AIOHTTPTransport
 
 
@@ -527,6 +529,61 @@ async def test_post_without_retry_decorator_fails() -> None:
 
     # Should only be called once (no retry)
     assert mock_session.post.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_etree_to_string")
+@pytest.mark.parametrize("no_cache", [True, False])
+async def test_onvif_service_retries_on_server_disconnect(no_cache: bool) -> None:
+    """ONVIFService must retry ServerDisconnectedError regardless of WSDL caching.
+
+    Regression test for issue #169: the default (no_cache=False) cached
+    transport lost the disconnect retry during the aiohttp migration, so a
+    ServerDisconnectedError surfaced to event listeners (PullMessages) instead
+    of being retried as it was on the previous httpx-based release.
+    """
+    wsdl = os.path.join(os.path.dirname(onvif.__file__), "wsdl", "devicemgmt.wsdl")
+    service = ONVIFService(
+        "http://example.com/onvif/device_service",
+        "user",
+        "pass",
+        wsdl,
+        no_cache=no_cache,
+    )
+    try:
+        mock_session = Mock(spec=ClientSession)
+        mock_session.timeout = Mock(total=30, sock_read=10)
+
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.headers = {}
+        mock_response.cookies = {}
+        mock_response.charset = "utf-8"
+        mock_response.read = AsyncMock(return_value=b"<response/>")
+
+        # First request fails with a disconnect, retry on a fresh connection
+        # succeeds.
+        mock_session.post = AsyncMock(
+            side_effect=[
+                aiohttp.ServerDisconnectedError("Server disconnected"),
+                mock_response,
+            ]
+        )
+        service.transport.session = mock_session
+        service.transport._client_timeout = mock_session.timeout
+
+        envelope = Mock()
+        envelope.tag = "TestEnvelope"
+
+        result = await service.transport.post_xml(
+            "http://example.com/onvif", envelope, {}
+        )
+
+        # Retried once (initial failure + successful retry) for both cache modes.
+        assert mock_session.post.call_count == 2
+        assert result.status_code == 200
+    finally:
+        await service.close()
 
 
 @pytest.mark.asyncio
