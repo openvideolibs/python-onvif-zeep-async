@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-import os
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+import os
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 import pytest_asyncio
 from zeep.exceptions import Fault
 
 import onvif
-import pytest
 from onvif import ONVIFCamera
 from onvif.exceptions import ONVIFError
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 WSDL_DIR = os.path.join(os.path.dirname(onvif.__file__), "wsdl")
 
@@ -57,7 +60,7 @@ def _services_response() -> list[Mock]:
 
 @asynccontextmanager
 async def _create_camera() -> AsyncGenerator[ONVIFCamera]:
-    cam = ONVIFCamera("192.168.1.100", 80, "admin", "password", wsdl_dir=WSDL_DIR)  # noqa: S106
+    cam = ONVIFCamera("192.168.1.100", 80, "admin", "password", wsdl_dir=WSDL_DIR)
     try:
         yield cam
     finally:
@@ -214,7 +217,8 @@ async def test_update_xaddrs_survives_unserializable_capabilities(
 
     class _Unserializable(dict):
         def __iter__(self):
-            raise ValueError("cannot serialize")
+            msg = "cannot serialize"
+            raise ValueError(msg)
 
     bad_caps = {"Extension": _Unserializable()}
     devicemgmt = _mock_devicemgmt(get_services=AsyncMock(side_effect=Fault("x")))
@@ -269,7 +273,7 @@ async def test_update_xaddrs_adjust_time_retries_with_auth_on_fault() -> None:
         "192.168.1.100",
         80,
         "admin",
-        "password",  # noqa: S106
+        "password",
         wsdl_dir=WSDL_DIR,
         adjust_time=True,
     )
