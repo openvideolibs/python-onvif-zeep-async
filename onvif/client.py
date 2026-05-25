@@ -542,8 +542,9 @@ class ONVIFCamera:
             cdate.Time.Hour,
             cdate.Time.Minute,
             cdate.Time.Second,
+            tzinfo=dt.timezone.utc,
         )
-        self.dt_diff = cam_date - dt.datetime.utcnow()
+        self.dt_diff = cam_date - dt.datetime.now(dt.timezone.utc)
         await devicemgmt.close()
         del self.services[devicemgmt.binding_key]
         return await self.create_devicemgmt_service()
