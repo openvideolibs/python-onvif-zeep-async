@@ -1,7 +1,6 @@
 """Example to fetch pullpoint events."""
 
 from aiohttp import web
-import aiohttp
 import argparse
 import asyncio
 import datetime as dt
@@ -71,24 +70,15 @@ async def run(args):
 
         pullpoint = manager.get_service()
         print("waiting for messages...")
-
-        # PullMessages is a long-poll: the camera holds the connection open
-        # until an event arrives or the request Timeout elapses. Cameras are
-        # allowed to close the connection at any time (RFC 2616 section 8.1.4)
-        # and many close idle connections between polls, which surfaces as
-        # aiohttp.ServerDisconnectedError.
-        #
-        # The library retries a transient disconnect automatically. Per the
-        # HTTP/1.1 spec a disconnected idempotent request should be retried at
-        # most once, so if the error still bubbles up, re-issue PullMessages a
-        # single time on the same subscription. There is no need to recreate
-        # the pullpoint manager.
-        pull = {"MessageLimit": 100, "Timeout": WAIT_TIME}
-        try:
-            messages = await pullpoint.PullMessages(pull)
-        except aiohttp.ServerDisconnectedError:
-            print("server disconnected, re-pulling once...")
-            messages = await pullpoint.PullMessages(pull)
+        # The library retries a transient ServerDisconnectedError once
+        # internally (RFC 2616 section 8.1.4), so callers can issue a single
+        # PullMessages without catching disconnects themselves.
+        messages = await pullpoint.PullMessages(
+            {
+                "MessageLimit": 100,
+                "Timeout": WAIT_TIME,
+            }
+        )
         print(messages)
 
         await manager.shutdown()
