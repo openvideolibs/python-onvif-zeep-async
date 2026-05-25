@@ -22,6 +22,11 @@ from onvif import ONVIFCamera
 # fake_hikvision is a sibling test helper; pytest puts tests/ on sys.path.
 from fake_hikvision import WSSE_NS, FakeHikvisionCamera
 
+WSNT_NS = "http://docs.oasis-open.org/wsn/b-2"
+ONVIF_CONCRETE_SET_DIALECT = (
+    "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet"
+)
+
 WSDL_DIR = os.path.join(os.path.dirname(onvif.__file__), "wsdl")
 DIGEST_TYPE = (
     "http://docs.oasis-open.org/wss/2004/01/"
@@ -303,3 +308,106 @@ async def test_camera_rejecting_unauthenticated_requests() -> None:
     request = camera.last_request("GetDeviceInformation")
     assert request is not None
     assert request.username == "admin"
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_omits_filter_by_default(
+    fake_camera: FakeHikvisionCamera, onvif_camera: ONVIFCamera
+) -> None:
+    """Without ``topic_filter`` the CreatePullPointSubscription has no Filter.
+
+    Regression guard so the new optional parameter cannot accidentally start
+    sending an empty Filter to cameras that do not support filtering.
+    """
+    await onvif_camera.update_xaddrs()
+
+    manager = await onvif_camera.create_pullpoint_manager(
+        dt.timedelta(seconds=60), lambda: None
+    )
+    try:
+        request = fake_camera.last_request("CreatePullPointSubscription")
+        assert request is not None
+        # No Filter element of any namespace and no TopicExpression at all.
+        envelope = request.envelope
+        assert envelope.find(".//{*}Filter") is None
+        assert envelope.find(f".//{{{WSNT_NS}}}TopicExpression") is None
+    finally:
+        manager.pause()
+        await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_sends_topic_filter(
+    fake_camera: FakeHikvisionCamera, onvif_camera: ONVIFCamera
+) -> None:
+    """``topic_filter`` is serialised as wsnt:Filter/wsnt:TopicExpression.
+
+    Drives the full pipeline -- including zeep's :class:`AnyObject`
+    serialisation of the WS-Notification FilterType -- against the fake
+    camera and asserts on the bytes received.
+    """
+    await onvif_camera.update_xaddrs()
+
+    topic = "tns1:RuleEngine/CellMotionDetector/Motion"
+    manager = await onvif_camera.create_pullpoint_manager(
+        dt.timedelta(seconds=60), lambda: None, topic_filter=topic
+    )
+    try:
+        request = fake_camera.last_request("CreatePullPointSubscription")
+        assert request is not None
+
+        envelope = request.envelope
+        filter_el = envelope.find(".//{*}Filter")
+        assert filter_el is not None
+
+        topic_expr = filter_el.find(f"{{{WSNT_NS}}}TopicExpression")
+        assert topic_expr is not None
+        assert topic_expr.get("Dialect") == ONVIF_CONCRETE_SET_DIALECT
+        assert (topic_expr.text or "").strip() == topic
+    finally:
+        manager.pause()
+        await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_sends_custom_dialect(
+    fake_camera: FakeHikvisionCamera, onvif_camera: ONVIFCamera
+) -> None:
+    """A caller-supplied ``topic_filter_dialect`` lands on the wire."""
+    await onvif_camera.update_xaddrs()
+
+    full_dialect = "http://docs.oasis-open.org/wsn/t-1/TopicExpression/Full"
+    manager = await onvif_camera.create_pullpoint_manager(
+        dt.timedelta(seconds=60),
+        lambda: None,
+        topic_filter="tns1:RuleEngine//.",
+        topic_filter_dialect=full_dialect,
+    )
+    try:
+        request = fake_camera.last_request("CreatePullPointSubscription")
+        assert request is not None
+        topic_expr = request.envelope.find(
+            f".//{{*}}Filter/{{{WSNT_NS}}}TopicExpression"
+        )
+        assert topic_expr is not None
+        assert topic_expr.get("Dialect") == full_dialect
+    finally:
+        manager.pause()
+        await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_unsubscribes_on_shutdown(
+    fake_camera: FakeHikvisionCamera, onvif_camera: ONVIFCamera
+) -> None:
+    """``shutdown()`` issues a WS-BaseNotification Unsubscribe to the camera."""
+    await onvif_camera.update_xaddrs()
+
+    manager = await onvif_camera.create_pullpoint_manager(
+        dt.timedelta(seconds=60), lambda: None
+    )
+    await manager.shutdown()
+
+    unsubscribe = fake_camera.last_request("Unsubscribe")
+    assert unsubscribe is not None
+    assert unsubscribe.path == "/onvif/Subscription"

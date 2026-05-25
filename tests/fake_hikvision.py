@@ -39,6 +39,7 @@ EVENTS_SERVICE_PATH = "/onvif/Events"
 IMAGING_SERVICE_PATH = "/onvif/Imaging"
 PTZ_SERVICE_PATH = "/onvif/PTZ"
 ANALYTICS_SERVICE_PATH = "/onvif/Analytics"
+SUBSCRIPTION_SERVICE_PATH = "/onvif/Subscription"
 
 
 def _soap_envelope(body: str) -> str:
@@ -223,6 +224,17 @@ class FakeHikvisionCamera:
             "</tev:CreatePullPointSubscriptionResponse>"
         )
 
+    def _unsubscribe_response(self) -> str:
+        return _soap_envelope("<wsnt:UnsubscribeResponse/>")
+
+    def _renew_response(self) -> str:
+        return _soap_envelope(
+            "<wsnt:RenewResponse>"
+            f"<wsnt:CurrentTime>{self.pullpoint_current_time}</wsnt:CurrentTime>"
+            f"<wsnt:TerminationTime>{self.pullpoint_termination_time}</wsnt:TerminationTime>"
+            "</wsnt:RenewResponse>"
+        )
+
     def _response_for(self, operation: str) -> str | None:
         builders = {
             "GetCapabilities": self._capabilities_response,
@@ -232,6 +244,8 @@ class FakeHikvisionCamera:
             "CreatePullPointSubscription": (
                 self._create_pullpoint_subscription_response
             ),
+            "Unsubscribe": self._unsubscribe_response,
+            "Renew": self._renew_response,
         }
         builder = builders.get(operation)
         return builder() if builder else None
@@ -294,6 +308,7 @@ class FakeHikvisionCamera:
             IMAGING_SERVICE_PATH,
             PTZ_SERVICE_PATH,
             ANALYTICS_SERVICE_PATH,
+            SUBSCRIPTION_SERVICE_PATH,
         ):
             app.router.add_post(path, self._handle)
         self._runner = web.AppRunner(app)

@@ -2,7 +2,12 @@
 
 from datetime import datetime, timedelta, time
 import ciso8601
+from zeep.client import Client
+from zeep.xsd.types.any import AnyObject
+from zeep.xsd.types.complex import ComplexType
 from zeep.xsd.types.builtins import DateTime, treat_whitespace, Time
+from zeep.xsd.elements import Element
+
 import isodate
 
 
@@ -100,3 +105,39 @@ class ForgivingTime(Time):
         if fixed_dt := _try_parse_datetime(f"2024-01-15T{fixed_time}Z"):
             return (fixed_dt + timedelta(**offset)).time()
         return isodate.parse_time(value)
+
+
+class TopicExpression(AnyObject):
+    """WS-BaseNotification ``TopicExpression`` element wrapper.
+
+    Wraps a topic filter string together with its dialect URI so it can be
+    embedded in a zeep ``FilterType._value_1`` list when calling
+    ``CreatePullPointSubscription``.
+
+    The default dialect is ONVIF's ``ConcreteSet`` (no wildcards or boolean
+    operators); pass ``dialect=`` to use a different WS-Topic grammar such as
+    the OASIS Full dialect.
+    """
+
+    NAMESPACE = "{http://docs.oasis-open.org/wsn/b-2}"
+    DIALECT = "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet"
+
+    def __init__(
+        self,
+        topic_expression_type: ComplexType,
+        value: str,
+        dialect: str = DIALECT,
+    ) -> None:
+        expression = Element(f"{self.NAMESPACE}TopicExpression", topic_expression_type)
+        super().__init__(
+            expression, topic_expression_type(_value_1=value, Dialect=dialect)
+        )
+
+    @classmethod
+    def from_client(
+        cls, client: Client, expression: str, dialect: str = DIALECT
+    ) -> "TopicExpression":
+        """Build a TopicExpression using the WSN-B type from ``client``."""
+        return cls(
+            client.get_type(f"{cls.NAMESPACE}TopicExpressionType"), expression, dialect
+        )

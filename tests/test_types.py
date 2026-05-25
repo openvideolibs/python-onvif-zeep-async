@@ -8,7 +8,7 @@ import datetime
 from onvif.client import ONVIFCamera
 from onvif.settings import DEFAULT_SETTINGS
 from onvif.transport import ASYNC_TRANSPORT
-from onvif.types import FastDateTime, ForgivingTime
+from onvif.types import FastDateTime, ForgivingTime, TopicExpression
 
 INVALID_TERM_TIME = b'<?xml version="1.0" encoding="UTF-8"?>\r\n<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope" xmlns:SOAP-ENC="http://www.w3.org/2003/05/soap-encoding" xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:wsa5="http://www.w3.org/2005/08/addressing" xmlns:chan="http://schemas.microsoft.com/ws/2005/02/duplex" xmlns:wsa="http://www.w3.org/2005/08/addressing" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:tns1="http://www.onvif.org/ver10/topics">\r\n<SOAP-ENV:Header>\r\n<wsa5:Action>http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesResponse</wsa5:Action>\r\n</SOAP-ENV:Header>\r\n<SOAP-ENV:Body>\r\n<tev:PullMessagesResponse>\r\n<tev:CurrentTime>2024-08-17T00:56:16Z</tev:CurrentTime>\r\n<tev:TerminationTime>2024-08-17T00:61:16Z</tev:TerminationTime>\r\n</tev:PullMessagesResponse>\r\n</SOAP-ENV:Body>\r\n</SOAP-ENV:Envelope>\r\n'
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "onvif", "wsdl")
@@ -121,3 +121,52 @@ def test_fix_time_overflow() -> None:
 def test_unfixable_time_overflow() -> None:
     with pytest.raises(ValueError, match="Unrecognised ISO 8601 time format"):
         assert ForgivingTime().pythonvalue("999:00:00")
+
+
+WSNT_NS = "http://docs.oasis-open.org/wsn/b-2"
+ONVIF_CONCRETE_SET_DIALECT = (
+    "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet"
+)
+
+
+@pytest.mark.asyncio
+async def test_topic_expression_default_dialect() -> None:
+    """from_client defaults to the ONVIF ConcreteSet dialect."""
+    device = ONVIFCamera("127.0.0.1", 80, "user", "pass", wsdl_dir=_WSDL_PATH)
+    device.xaddrs = {
+        "http://www.onvif.org/ver10/events/wsdl": "http://192.168.1.1/onvif/Events"
+    }
+    events = await device.create_events_service()
+
+    expr = TopicExpression.from_client(
+        events.zeep_client, "tns1:RuleEngine/CellMotionDetector/Motion"
+    )
+
+    assert expr.value._value_1 == "tns1:RuleEngine/CellMotionDetector/Motion"
+    assert expr.value.Dialect == ONVIF_CONCRETE_SET_DIALECT
+    assert expr.xsd_elm.qname.text == f"{{{WSNT_NS}}}TopicExpression"
+
+
+@pytest.mark.asyncio
+async def test_topic_expression_custom_dialect() -> None:
+    """A caller-supplied dialect is preserved on the wire."""
+    device = ONVIFCamera("127.0.0.1", 80, "user", "pass", wsdl_dir=_WSDL_PATH)
+    device.xaddrs = {
+        "http://www.onvif.org/ver10/events/wsdl": "http://192.168.1.1/onvif/Events"
+    }
+    events = await device.create_events_service()
+    full_dialect = "http://docs.oasis-open.org/wsn/t-1/TopicExpression/Full"
+
+    expr = TopicExpression.from_client(
+        events.zeep_client,
+        "tns1:RuleEngine//.",
+        dialect=full_dialect,
+    )
+
+    assert expr.value.Dialect == full_dialect
+    assert expr.value._value_1 == "tns1:RuleEngine//."
+
+
+def test_topic_expression_dialect_constant_matches_onvif_spec() -> None:
+    """The default dialect is the ONVIF ConcreteSet URI verbatim."""
+    assert TopicExpression.DIALECT == ONVIF_CONCRETE_SET_DIALECT
