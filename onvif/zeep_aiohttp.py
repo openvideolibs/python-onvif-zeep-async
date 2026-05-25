@@ -6,15 +6,15 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+import httpx
+from aiohttp import ClientResponse, ClientSession, hdrs
+from multidict import CIMultiDict
+from requests import Response
+from requests.structures import CaseInsensitiveDict
 from zeep.cache import SqliteCache
 from zeep.transports import Transport
 from zeep.utils import get_version
 from zeep.wsdl.utils import etree_to_string
-from multidict import CIMultiDict
-import httpx
-from aiohttp import ClientResponse, ClientSession, hdrs
-from requests import Response
-from requests.structures import CaseInsensitiveDict
 
 if TYPE_CHECKING:
     from lxml.etree import _Element

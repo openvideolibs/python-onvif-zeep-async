@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import os
 from collections.abc import AsyncGenerator, Generator
-from unittest.mock import AsyncMock, Mock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest

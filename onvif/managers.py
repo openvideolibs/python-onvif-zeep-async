@@ -9,11 +9,11 @@ from abc import abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 from zeep.exceptions import Fault, XMLParseError, XMLSyntaxError
 from zeep.loader import parse_xml
 from zeep.wsdl.bindings.soap import SoapOperation
 
-import aiohttp
 from onvif.exceptions import ONVIFError
 
 from .settings import DEFAULT_SETTINGS
