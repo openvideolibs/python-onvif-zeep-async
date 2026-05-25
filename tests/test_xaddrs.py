@@ -72,9 +72,7 @@ async def camera() -> AsyncGenerator[ONVIFCamera]:
 
 def _mock_devicemgmt(get_services: AsyncMock | None = None) -> Mock:
     devicemgmt = Mock()
-    devicemgmt.GetCapabilities = AsyncMock(
-        return_value=_top_level_capabilities()
-    )
+    devicemgmt.GetCapabilities = AsyncMock(return_value=_top_level_capabilities())
     devicemgmt.GetServices = get_services or AsyncMock(
         return_value=_services_response()
     )
