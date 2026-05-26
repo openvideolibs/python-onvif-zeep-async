@@ -17,6 +17,7 @@ extend-select = [
   "C4", # flake8-comprehensions
   "DTZ", # flake8-datetimez
   "EM", # flake8-errmsg
+  "ERA", # eradicate
   "EXE", # flake8-executable
   "FA", # flake8-future-annotations
   "FIX", # flake8-fixme

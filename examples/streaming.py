@@ -63,7 +63,7 @@ async def media_profile_configuration():
     request.ForcePersistence = True
 
     # Set the video encoder configuration
-    # await media_service.SetVideoEncoderConfiguration(request)
+    # await media_service.SetVideoEncoderConfiguration(request)  # noqa: ERA001
     await mycam.close()
 
 

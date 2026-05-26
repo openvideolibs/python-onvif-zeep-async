@@ -148,7 +148,7 @@ async def test_closed_reflects_session_state() -> None:
 
 
 # --------------------------------------------------------------------------
-# BaseManager: lifecycle (start/pause/resume/stop/shutdown)
+# BaseManager: lifecycle (start/pause/resume/stop/shutdown)  # noqa: ERA001
 # --------------------------------------------------------------------------
 
 
@@ -237,7 +237,7 @@ async def test_shutdown_without_pending_task() -> None:
 
 
 # --------------------------------------------------------------------------
-# BaseManager: set_synchronization_point
+# BaseManager: set_synchronization_point  # noqa: ERA001
 # --------------------------------------------------------------------------
 
 
