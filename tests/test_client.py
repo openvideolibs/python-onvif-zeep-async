@@ -28,7 +28,7 @@ from onvif.client import (
     _get_shared_sqlite_cache,
     _list_wsdl_dir,
 )
-from onvif.exceptions import ONVIFError
+from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -630,3 +630,68 @@ async def test_create_subscription_service_passes_port_type() -> None:
 
         assert result is sentinel
         mock_create.assert_awaited_once_with("subscription", port_type="SomePortType")
+
+
+# --------------------------------------------------------------------------
+# safe_func: exception passthrough
+# --------------------------------------------------------------------------
+
+
+def test_safe_func_passes_through_onvif_timeout_error() -> None:
+    """safe_func must not downgrade ONVIFTimeoutError to base ONVIFError.
+
+    Callers (e.g. Home Assistant's onvif integration) branch on the subclass
+    to decide whether to retry. Wrapping it in ONVIFError destroys that
+    contract.
+    """
+
+    msg = "camera unresponsive"
+
+    @onvif.client.safe_func
+    def raises_timeout() -> None:
+        raise ONVIFTimeoutError(msg)
+
+    with pytest.raises(ONVIFTimeoutError):
+        raises_timeout()
+
+
+def test_safe_func_passes_through_onvif_auth_error() -> None:
+    """safe_func must not downgrade ONVIFAuthError to base ONVIFError."""
+
+    msg = "bad credentials"
+
+    @onvif.client.safe_func
+    def raises_auth() -> None:
+        raise ONVIFAuthError(msg)
+
+    with pytest.raises(ONVIFAuthError):
+        raises_auth()
+
+
+def test_safe_func_passes_through_base_onvif_error_unchanged() -> None:
+    """safe_func must not double-wrap an ONVIFError into another ONVIFError."""
+    original = ONVIFError("explicit failure")
+
+    @onvif.client.safe_func
+    def raises_onvif() -> None:
+        raise original
+
+    with pytest.raises(ONVIFError) as excinfo:
+        raises_onvif()
+    # The original exception instance must propagate, not a fresh wrapper.
+    assert excinfo.value is original
+
+
+def test_safe_func_still_wraps_generic_exceptions() -> None:
+    """safe_func should still convert non-ONVIF exceptions into ONVIFError."""
+
+    msg = "oops"
+
+    @onvif.client.safe_func
+    def raises_value_error() -> None:
+        raise ValueError(msg)
+
+    with pytest.raises(ONVIFError) as excinfo:
+        raises_value_error()
+    assert not isinstance(excinfo.value, (ONVIFTimeoutError, ONVIFAuthError))
+    assert isinstance(excinfo.value.__cause__, ValueError)
