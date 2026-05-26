@@ -14,6 +14,7 @@ extend-select = [
   "B", # flake8-bugbear
   "DTZ", # flake8-datetimez
   "EM", # flake8-errmsg
+  "G", # flake8-logging-format
   "I", # isort
   "PERF", # Perflint
   "PL", # pylint
