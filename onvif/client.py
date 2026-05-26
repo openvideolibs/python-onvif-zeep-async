@@ -49,17 +49,27 @@ logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 
 _SENTINEL = object()
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
-# Names of wsdl files already confirmed to exist, keyed by wsdl_dir. Populated
-# lazily off the event loop on first use so the os.listdir stays out of the
-# asyncio path.
-_WSDL_DIR_FILES: dict[str, frozenset[str]] = {}
+# Names of regular files in each wsdl_dir, populated lazily off the event loop
+# on first use so the directory scan stays out of the asyncio path. None means
+# the cache could not be built and callers should fall back to path_isfile.
+_WSDL_DIR_FILES: dict[str, frozenset[str] | None] = {}
 
 
-def _list_wsdl_dir(wsdl_dir: str) -> frozenset[str]:
+def _list_wsdl_dir(wsdl_dir: str) -> frozenset[str] | None:
+    """Return the set of regular file names in wsdl_dir.
+
+    Returns an empty frozenset if the directory itself does not exist (then
+    every wsdl lookup correctly fails); returns None on any other OSError so
+    callers fall back to path_isfile rather than treating a permissions or
+    I/O failure as "wsdl not found".
+    """
     try:
-        return frozenset(os.listdir(wsdl_dir))
-    except OSError:
+        with os.scandir(wsdl_dir) as it:
+            return frozenset(entry.name for entry in it if entry.is_file())
+    except FileNotFoundError:
         return frozenset()
+    except OSError:
+        return None
 
 
 _DEFAULT_TIMEOUT = 90
