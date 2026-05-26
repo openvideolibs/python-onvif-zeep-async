@@ -180,12 +180,22 @@ class AsyncTransportProtocolErrorHandler(AIOHTTPTransport):
     Retry on remote protocol error.
 
     http://datatracker.ietf.org/doc/html/rfc2616#section-8.1.4 allows the server
-    # to close the connection at any time, we treat this as a normal and try again
-    # once since
+    to close the connection at any time, we treat this as normal and try again
+    once. Two flavors of "the pooled socket is dead before we wrote":
+    ServerDisconnectedError when aiohttp detects the close at request start, and
+    ClientConnectionResetError when it detects the close mid-prepare (the writer
+    raises before transport.write()). Both mean the request did not reach the
+    server, so retry is idempotency-safe; we deliberately do not catch the
+    broader ClientOSError because that can fire after bytes are on the wire.
     """
 
     @retry_connection_error(
-        attempts=2, exception=aiohttp.ServerDisconnectedError, backoff=0
+        attempts=2,
+        exception=(
+            aiohttp.ServerDisconnectedError,
+            aiohttp.ClientConnectionResetError,
+        ),
+        backoff=0,
     )
     async def post(
         self, address: str, message: str, headers: dict[str, str]
@@ -193,7 +203,12 @@ class AsyncTransportProtocolErrorHandler(AIOHTTPTransport):
         return await super().post(address, message, headers)
 
     @retry_connection_error(
-        attempts=2, exception=aiohttp.ServerDisconnectedError, backoff=0
+        attempts=2,
+        exception=(
+            aiohttp.ServerDisconnectedError,
+            aiohttp.ClientConnectionResetError,
+        ),
+        backoff=0,
     )
     async def get(
         self,
@@ -204,7 +219,12 @@ class AsyncTransportProtocolErrorHandler(AIOHTTPTransport):
         return await super().get(address, params, headers)
 
     @retry_connection_error(
-        attempts=2, exception=aiohttp.ServerDisconnectedError, backoff=0
+        attempts=2,
+        exception=(
+            aiohttp.ServerDisconnectedError,
+            aiohttp.ClientConnectionResetError,
+        ),
+        backoff=0,
     )
     async def post_xml(
         self, address: str, envelope: Any, headers: dict[str, str]
