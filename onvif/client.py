@@ -48,7 +48,10 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 
 _SENTINEL = object()
-_WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
+# Default wsdl_dir for ONVIFCamera. Points at the WSDL files bundled with the
+# package (onvif/wsdl); historically this was off by one level and pointed at a
+# directory that did not exist, which silently forced every caller to override.
+_WSDL_PATH = os.path.join(os.path.dirname(__file__), "wsdl")
 # Names of regular files in each wsdl_dir, populated lazily off the event loop
 # on first use so the directory scan stays out of the asyncio path. None means
 # the cache could not be built and callers should fall back to path_isfile.
@@ -72,24 +75,33 @@ def _list_wsdl_dir(wsdl_dir: str) -> frozenset[str] | None:
         return None
 
 
-# Pre-warm the bundled wsdl directory at module import time, before any event
-# loop is running, so direct ONVIFService(...) usage in async code with a
-# bundled wsdl path does not trip blockbuster on the first existence check.
-_BUNDLED_WSDL_PATH = os.path.join(os.path.dirname(__file__), "wsdl")
-_WSDL_DIR_FILES[_BUNDLED_WSDL_PATH] = _list_wsdl_dir(_BUNDLED_WSDL_PATH)
+# Pre-warm the bundled wsdl directory at module import time so direct
+# ONVIFService(...) usage in async code with a bundled wsdl path does not trip
+# blockbuster on the first existence check. Import normally happens at startup
+# before any event loop is running; if onvif.client is imported from inside a
+# running loop, the alternative (lazy warm on first direct use) would block in
+# the loop too, so accept the one-shot scandir here.
+_WSDL_DIR_FILES[_WSDL_PATH] = _list_wsdl_dir(_WSDL_PATH)
 
 
 # SqliteCache opens its sqlite file in __init__, which does blocking I/O.
 # Build one shared instance lazily off the event loop and reuse it across all
-# ONVIFService transports so the per-service setup() stays non-blocking.
+# ONVIFService transports so the per-service setup() stays non-blocking. An
+# asyncio.Lock guards concurrent setup() calls so exactly one cache is built.
 _SHARED_SQLITE_CACHE: SqliteCache | None = None
+_SHARED_SQLITE_CACHE_LOCK: asyncio.Lock | None = None
 
 
 async def _get_shared_sqlite_cache() -> SqliteCache:
-    global _SHARED_SQLITE_CACHE  # noqa: PLW0603
-    if _SHARED_SQLITE_CACHE is None:
-        _SHARED_SQLITE_CACHE = await asyncio.to_thread(SqliteCache)
-    return _SHARED_SQLITE_CACHE
+    global _SHARED_SQLITE_CACHE, _SHARED_SQLITE_CACHE_LOCK  # noqa: PLW0603
+    if _SHARED_SQLITE_CACHE is not None:
+        return _SHARED_SQLITE_CACHE
+    if _SHARED_SQLITE_CACHE_LOCK is None:
+        _SHARED_SQLITE_CACHE_LOCK = asyncio.Lock()
+    async with _SHARED_SQLITE_CACHE_LOCK:
+        if _SHARED_SQLITE_CACHE is None:
+            _SHARED_SQLITE_CACHE = await asyncio.to_thread(SqliteCache)
+        return _SHARED_SQLITE_CACHE
 
 
 _DEFAULT_TIMEOUT = 90

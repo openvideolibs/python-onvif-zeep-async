@@ -20,7 +20,13 @@ import pytest
 
 import onvif.client
 from onvif import ONVIFCamera
-from onvif.client import _WSDL_DIR_FILES, ONVIFService, ZeepAsyncClient, _list_wsdl_dir
+from onvif.client import (
+    _WSDL_DIR_FILES,
+    ONVIFService,
+    ZeepAsyncClient,
+    _get_shared_sqlite_cache,
+    _list_wsdl_dir,
+)
 from onvif.exceptions import ONVIFError
 
 if TYPE_CHECKING:
@@ -75,6 +81,23 @@ def test_list_wsdl_dir_unreadable_returns_none(tmp_path) -> None:
 
     with patch("onvif.client.os.scandir", _raise_permission):
         assert _list_wsdl_dir(str(tmp_path)) is None
+
+
+# --------------------------------------------------------------------------
+# _get_shared_sqlite_cache
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_shared_sqlite_cache_is_singleton() -> None:
+    """Repeat calls return the same instance without rebuilding the cache."""
+    with patch("onvif.client.SqliteCache") as cache_cls:
+        cache_cls.return_value = Mock()
+        first = await _get_shared_sqlite_cache()
+        second = await _get_shared_sqlite_cache()
+
+    assert first is second
+    assert cache_cls.call_count == 1
 
 
 # --------------------------------------------------------------------------
