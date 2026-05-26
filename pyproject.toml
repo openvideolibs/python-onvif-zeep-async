@@ -84,4 +84,4 @@ ignore = [
 ]
 
 [build-system]
-requires = ['setuptools>=65.4.1', 'wheel']
+requires = ['setuptools>=82.0.1', 'wheel']
