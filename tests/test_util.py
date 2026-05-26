@@ -3,12 +3,27 @@ from __future__ import annotations
 import os
 
 import pytest
+from zeep.exceptions import Fault
 from zeep.loader import parse_xml
 
 from onvif.client import ONVIFCamera
 from onvif.settings import DEFAULT_SETTINGS
 from onvif.transport import ASYNC_TRANSPORT
-from onvif.util import normalize_url, obscure_user_pass_url, strip_user_pass_url
+from onvif.util import (
+    extract_subcodes_as_strings,
+    is_auth_error,
+    normalize_url,
+    obscure_user_pass_url,
+    stringify_onvif_error,
+    strip_user_pass_url,
+)
+
+
+class _Subcode:
+    """Minimal stand-in for an XML subcode element exposing ``.text``."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
 
 PULL_POINT_RESPONSE_MISSING_URL = b'<?xml version="1.0" encoding="UTF-8"?>\n<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:wsdd="http://schemas.xmlsoap.org/ws/2005/04/discovery" xmlns:chan="http://schemas.microsoft.com/ws/2005/02/duplex" xmlns:wsa5="http://www.w3.org/2005/08/addressing" xmlns:ns1="http://www.onvif.org/ver10/pacs" xmlns:xmime="http://tempuri.org/xmime.xsd" xmlns:xop="http://www.w3.org/2004/08/xop/include" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:wsrfbf="http://docs.oasis-open.org/wsrf/bf-2" xmlns:wstop="http://docs.oasis-open.org/wsn/t-1" xmlns:wsrfr="http://docs.oasis-open.org/wsrf/r-2" xmlns:tdn="http://www.onvif.org/ver10/network/wsdl" xmlns:tds="http://www.onvif.org/ver10/device/wsdl" xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl" xmlns:tmd="http://www.onvif.org/ver10/deviceIO/wsdl" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl" xmlns:trt="http://www.onvif.org/ver10/media/wsdl" xmlns:trv="http://www.onvif.org/ver10/receiver/wsdl" xmlns:tse="http://www.onvif.org/ver10/search/wsdl"><SOAP-ENV:Header><wsa5:MessageID>urn:uuid:76acd0bc-498e-4657-9414-b386bd4b0985</wsa5:MessageID><wsa5:To SOAP-ENV:mustUnderstand="1">http://192.168.2.18:8080/onvif/device_service</wsa5:To><wsa5:Action SOAP-ENV:mustUnderstand="1">http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest</wsa5:Action></SOAP-ENV:Header><SOAP-ENV:Body><tev:CreatePullPointSubscriptionResponse><tev:SubscriptionReference><wsa5:Address/></tev:SubscriptionReference><wsnt:CurrentTime>1970-01-01T00:00:00Z</wsnt:CurrentTime><wsnt:TerminationTime>1970-01-01T00:00:00Z</wsnt:TerminationTime></tev:CreatePullPointSubscriptionResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>\r\n'
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "onvif", "wsdl")
@@ -76,3 +91,82 @@ def test_obscure_user_pass_url():
         obscure_user_pass_url("http://user@1.2.3.4/?password=bar")
         == "http://********@1.2.3.4/?password=********"
     )
+
+
+def test_extract_subcodes_as_strings():
+    # Elements exposing .text are stringified via their text attribute
+    assert extract_subcodes_as_strings([_Subcode("ter:NotAuthorized")]) == [
+        "ter:NotAuthorized"
+    ]
+    # Elements without .text fall back to str()
+    assert extract_subcodes_as_strings(["plain", 5]) == ["plain", "5"]
+    # Mixed list
+    assert extract_subcodes_as_strings([_Subcode("a"), "b"]) == ["a", "b"]
+    # Non-list input is wrapped and stringified
+    assert extract_subcodes_as_strings("solo") == ["solo"]
+    assert extract_subcodes_as_strings(None) == ["None"]
+
+
+def test_stringify_onvif_error_non_fault():
+    assert stringify_onvif_error(ValueError("boom")) == "boom"
+
+
+def test_stringify_onvif_error_empty():
+    # An empty message yields the fallback describing the error type
+    result = stringify_onvif_error(ValueError(""))
+    assert result == "Device sent empty error with type <class 'ValueError'>"
+
+
+def test_stringify_onvif_error_fault_message_only():
+    assert stringify_onvif_error(Fault("something failed")) == "something failed"
+
+
+def test_stringify_onvif_error_fault_with_string_detail():
+    error = Fault("failed", detail="extra info")
+    assert stringify_onvif_error(error) == "failed: extra info"
+
+
+def test_stringify_onvif_error_fault_with_bytes_detail():
+    error = Fault("failed", detail=b"byte detail")
+    assert stringify_onvif_error(error) == "failed: byte detail"
+
+
+def test_stringify_onvif_error_fault_full():
+    error = Fault(
+        "failed",
+        code="soap:Sender",
+        actor="device",
+        detail="extra info",
+        subcodes=[_Subcode("ter:NotAuthorized")],
+    )
+    assert stringify_onvif_error(error) == (
+        "failed: extra info (code:soap:Sender) "
+        "(subcodes:ter:NotAuthorized) (actor:device)"
+    )
+
+
+def test_stringify_onvif_error_fault_empty_message():
+    error = Fault("")
+    assert (
+        stringify_onvif_error(error)
+        == "Device sent empty error with type <class 'zeep.exceptions.Fault'>"
+    )
+
+
+def test_is_auth_error_non_fault():
+    assert is_auth_error(ValueError("NotAuthorized")) is False
+
+
+def test_is_auth_error_subcode():
+    error = Fault("denied", subcodes=[_Subcode("ter:NotAuthorized")])
+    assert is_auth_error(error) is True
+
+
+def test_is_auth_error_message():
+    error = Fault("Authentication required")
+    assert is_auth_error(error) is True
+
+
+def test_is_auth_error_not_auth():
+    error = Fault("some other failure", subcodes=[_Subcode("ter:Other")])
+    assert is_auth_error(error) is False
