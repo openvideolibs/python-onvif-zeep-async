@@ -17,6 +17,7 @@ extend-select = [
   "I", # isort
   "PERF", # Perflint
   "PL", # pylint
+  "PYI", # flake8-pyi
   "RET", # flake8-return
   "RUF", # ruff-specific
   "S", # flake8-bandit
