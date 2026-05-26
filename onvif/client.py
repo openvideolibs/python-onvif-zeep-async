@@ -72,6 +72,26 @@ def _list_wsdl_dir(wsdl_dir: str) -> frozenset[str] | None:
         return None
 
 
+# Pre-warm the bundled wsdl directory at module import time, before any event
+# loop is running, so direct ONVIFService(...) usage in async code with a
+# bundled wsdl path does not trip blockbuster on the first existence check.
+_BUNDLED_WSDL_PATH = os.path.join(os.path.dirname(__file__), "wsdl")
+_WSDL_DIR_FILES[_BUNDLED_WSDL_PATH] = _list_wsdl_dir(_BUNDLED_WSDL_PATH)
+
+
+# SqliteCache opens its sqlite file in __init__, which does blocking I/O.
+# Build one shared instance lazily off the event loop and reuse it across all
+# ONVIFService transports so the per-service setup() stays non-blocking.
+_SHARED_SQLITE_CACHE: SqliteCache | None = None
+
+
+async def _get_shared_sqlite_cache() -> SqliteCache:
+    global _SHARED_SQLITE_CACHE  # noqa: PLW0603
+    if _SHARED_SQLITE_CACHE is None:
+        _SHARED_SQLITE_CACHE = await asyncio.to_thread(SqliteCache)
+    return _SHARED_SQLITE_CACHE
+
+
 _DEFAULT_TIMEOUT = 90
 _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
@@ -335,10 +355,14 @@ class ONVIFService:
         # allows the server to close the connection at any time, and cameras
         # routinely do so between event polls. The cache only affects WSDL
         # loading, so it is orthogonal to the connection-error retry.
+        # The SqliteCache opens a sqlite file in its constructor (blocking I/O);
+        # leave cache=None here and let setup() attach the shared cache instance
+        # built off the event loop.
+        self._no_cache = no_cache
         self.transport = AsyncTransportProtocolErrorHandler(
             session=self._session,
             verify_ssl=False,
-            cache=None if no_cache else SqliteCache(),
+            cache=None,
         )
         self.document: Document | None = None
         self.zeep_client_authless: ZeepAsyncClient | None = None
@@ -355,6 +379,8 @@ class ONVIFService:
         wsse = UsernameDigestTokenDtDiff(
             self.user, self.passwd, dt_diff=self.dt_diff, use_digest=self.encrypt
         )
+        if not self._no_cache and self.transport.cache is None:
+            self.transport.cache = await _get_shared_sqlite_cache()
         self.document = await _cached_document(self.url)
         self.zeep_client_authless = ZeepAsyncClient(
             wsdl=self.document,

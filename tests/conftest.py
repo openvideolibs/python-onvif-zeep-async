@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from onvif.client import _WSDL_DIR_FILES
+
 try:
     from blockbuster import BlockBuster, blockbuster_ctx
 except ImportError:
@@ -17,9 +19,6 @@ if TYPE_CHECKING:
 _KNOWN_BLOCKING: frozenset[str] = frozenset(
     {
         "tests/test_server_disconnected_retry.py::test_multiple_sequential_requests_with_disconnects",
-        "tests/test_server_disconnected_retry.py::test_onvif_service_retries_on_server_disconnect[False]",
-        "tests/test_types.py::test_parse_invalid_dt",
-        "tests/test_util.py::test_normalize_url_with_missing_url",
     }
 )
 
@@ -37,6 +36,22 @@ def pytest_collection_modifyitems(
     for item in items:
         if item.nodeid in _KNOWN_BLOCKING:
             item.add_marker(marker)
+
+
+@pytest.fixture(autouse=True)
+def _reset_wsdl_dir_cache() -> Iterator[None]:
+    """Snapshot _WSDL_DIR_FILES so each test starts from the import-time state.
+
+    The bundled wsdl directory is pre-warmed at module import; tests must not
+    leak entries (for example, tmp_path scratch dirs) into other tests, and
+    must not delete the bundled entry that subsequent tests rely on.
+    """
+    snapshot = dict(_WSDL_DIR_FILES)
+    try:
+        yield
+    finally:
+        _WSDL_DIR_FILES.clear()
+        _WSDL_DIR_FILES.update(snapshot)
 
 
 @pytest.fixture(autouse=True)

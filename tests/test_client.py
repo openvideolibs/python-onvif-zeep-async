@@ -20,7 +20,7 @@ import pytest
 
 import onvif.client
 from onvif import ONVIFCamera
-from onvif.client import ONVIFService, ZeepAsyncClient, _list_wsdl_dir
+from onvif.client import _WSDL_DIR_FILES, ONVIFService, ZeepAsyncClient, _list_wsdl_dir
 from onvif.exceptions import ONVIFError
 
 if TYPE_CHECKING:
@@ -359,6 +359,30 @@ def test_get_definition_unsupported_service_without_xaddr() -> None:
 # --------------------------------------------------------------------------
 # ONVIFCamera.create_onvif_service
 # --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _wsdl_scratch_dir(tmp_path):
+    """A scratch wsdl_dir prepared synchronously so async tests can use it."""
+    (tmp_path / "devicemgmt.wsdl").write_text("<wsdl/>")
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_create_onvif_service_warms_wsdl_dir_cache(_wsdl_scratch_dir) -> None:
+    """A previously unseen wsdl_dir is scanned off the event loop on first use."""
+    wsdl_dir = str(_wsdl_scratch_dir)
+    assert wsdl_dir not in _WSDL_DIR_FILES
+
+    async with create_test_camera(wsdl_dir=wsdl_dir) as cam:
+        sentinel = Mock(spec=ONVIFService)
+        sentinel.setup = AsyncMock()
+        with patch("onvif.client.ONVIFService", return_value=sentinel):
+            await cam.create_onvif_service("devicemgmt")
+
+    cached = _WSDL_DIR_FILES.get(wsdl_dir)
+    assert cached is not None
+    assert "devicemgmt.wsdl" in cached
 
 
 @pytest.mark.asyncio
