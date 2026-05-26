@@ -15,6 +15,8 @@ from zeep.utils import get_version
 from zeep.wsdl.utils import etree_to_string
 
 if TYPE_CHECKING:
+    from types import TracebackType
+
     from lxml.etree import _Element
     from multidict import CIMultiDict
     from zeep.cache import SqliteCache
@@ -56,11 +58,16 @@ class AIOHTTPTransport(Transport):
         # Extract timeout from session
         self._client_timeout = session.timeout
 
-    async def __aenter__(self) -> AIOHTTPTransport:
+    async def __aenter__(self) -> AIOHTTPTransport:  # noqa: PYI034
         """Enter async context."""
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Exit async context."""
 
     async def aclose(self) -> None:
