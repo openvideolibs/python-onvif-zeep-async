@@ -48,7 +48,10 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 
 _SENTINEL = object()
-_WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
+# Default wsdl_dir for ONVIFCamera. Points at the WSDL files bundled with the
+# package (onvif/wsdl); historically this was off by one level and pointed at a
+# directory that did not exist, which silently forced every caller to override.
+_WSDL_PATH = os.path.join(os.path.dirname(__file__), "wsdl")
 # Names of regular files in each wsdl_dir, populated lazily off the event loop
 # on first use so the directory scan stays out of the asyncio path. None means
 # the cache could not be built and callers should fall back to path_isfile.
@@ -70,6 +73,40 @@ def _list_wsdl_dir(wsdl_dir: str) -> frozenset[str] | None:
         return frozenset()
     except OSError:
         return None
+
+
+# Pre-warm the bundled wsdl directory at module import time so direct
+# ONVIFService(...) usage in async code with a bundled wsdl path does not trip
+# blockbuster on the first existence check. Import normally happens at startup
+# before any event loop is running; if onvif.client is imported from inside a
+# running loop, the alternative (lazy warm on first direct use) would block in
+# the loop too, so accept the one-shot scandir here.
+_WSDL_DIR_FILES[_WSDL_PATH] = _list_wsdl_dir(_WSDL_PATH)
+
+
+# SqliteCache opens its sqlite file in __init__, which does blocking I/O.
+# Build one shared instance lazily off the event loop and reuse it across all
+# ONVIFService transports so the per-service setup() stays non-blocking. The
+# Lock is created lazily on first use (we cannot promise a running loop at
+# import time) and double-checked, so concurrent first-touch setup() calls
+# (for example, multiple cameras configured in parallel at startup) build
+# exactly one SqliteCache instead of racing through to_thread() twice. The
+# pre-Lock check-and-create is race-free because asyncio coroutines are
+# cooperatively scheduled within a single loop and there is no await between
+# the None check and the assignment.
+_SHARED_SQLITE_CACHE: SqliteCache | None = None
+_SHARED_SQLITE_CACHE_LOCK: asyncio.Lock | None = None
+
+
+async def _get_shared_sqlite_cache() -> SqliteCache:
+    global _SHARED_SQLITE_CACHE, _SHARED_SQLITE_CACHE_LOCK  # noqa: PLW0603
+    if _SHARED_SQLITE_CACHE is None:
+        if _SHARED_SQLITE_CACHE_LOCK is None:
+            _SHARED_SQLITE_CACHE_LOCK = asyncio.Lock()
+        async with _SHARED_SQLITE_CACHE_LOCK:
+            if _SHARED_SQLITE_CACHE is None:
+                _SHARED_SQLITE_CACHE = await asyncio.to_thread(SqliteCache)
+    return _SHARED_SQLITE_CACHE
 
 
 _DEFAULT_TIMEOUT = 90
@@ -335,10 +372,14 @@ class ONVIFService:
         # allows the server to close the connection at any time, and cameras
         # routinely do so between event polls. The cache only affects WSDL
         # loading, so it is orthogonal to the connection-error retry.
+        # The SqliteCache opens a sqlite file in its constructor (blocking I/O);
+        # leave cache=None here and let setup() attach the shared cache instance
+        # built off the event loop.
+        self._no_cache = no_cache
         self.transport = AsyncTransportProtocolErrorHandler(
             session=self._session,
             verify_ssl=False,
-            cache=None if no_cache else SqliteCache(),
+            cache=None,
         )
         self.document: Document | None = None
         self.zeep_client_authless: ZeepAsyncClient | None = None
@@ -355,6 +396,8 @@ class ONVIFService:
         wsse = UsernameDigestTokenDtDiff(
             self.user, self.passwd, dt_diff=self.dt_diff, use_digest=self.encrypt
         )
+        if not self._no_cache and self.transport.cache is None:
+            self.transport.cache = await _get_shared_sqlite_cache()
         self.document = await _cached_document(self.url)
         self.zeep_client_authless = ZeepAsyncClient(
             wsdl=self.document,
