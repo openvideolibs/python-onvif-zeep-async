@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -271,21 +270,20 @@ class AIOHTTPTransport(Transport):
 
     def load(self, url: str) -> bytes:
         """
-        Load content from URL synchronously.
+        Synchronous load is not supported.
 
-        This method runs the async get method in a new event loop.
+        The underlying ``aiohttp.ClientSession`` is bound to the event loop
+        that created it; driving it from a fresh loop here would raise
+        ``RuntimeError: ... is bound to a different event loop`` at runtime.
+        Use :class:`onvif.transport.AsyncSafeTransport` for WSDL/schema
+        loading.
 
-        Args:
-            url: The URL to load
-
-        Returns:
-            The content as bytes
+        Raises:
+            RuntimeError: Always.
 
         """
-        # Create a new event loop for sync operation
-        loop = asyncio.new_event_loop()
-        try:
-            response = loop.run_until_complete(self.get(url))
-            return response.content
-        finally:
-            loop.close()
+        msg = (
+            "Synchronous load() is not supported on AIOHTTPTransport; "
+            "use AsyncSafeTransport for WSDL/schema loading"
+        )
+        raise RuntimeError(msg)

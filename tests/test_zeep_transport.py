@@ -1,7 +1,7 @@
 """Tests for AIOHTTPTransport to ensure compatibility with zeep's AsyncTransport."""
 
 from http.cookies import SimpleCookie
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import aiohttp
 import httpx
@@ -158,19 +158,13 @@ async def test_aclose():
     mock_session.close.assert_not_called()
 
 
-def test_load_sync():
-    """Test load() method works synchronously."""
+def test_load_sync_raises():
+    """Synchronous load() is unsupported and must raise."""
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session)
 
-    # Mock the async get method
-    mock_response = Mock(spec=RequestsResponse)
-    mock_response.content = b"<wsdl>test</wsdl>"
-
-    with patch.object(transport, "get", new=AsyncMock(return_value=mock_response)):
-        result = transport.load("http://example.com/wsdl")
-
-    assert result == b"<wsdl>test</wsdl>"
+    with pytest.raises(RuntimeError, match=r"Synchronous load.* is not supported"):
+        transport.load("http://example.com/wsdl")
 
 
 @pytest.mark.asyncio
@@ -529,30 +523,14 @@ async def test_session_reuse():
     assert mock_session.get.call_count == 2
 
 
-def test_sync_load_creates_new_loop():
-    """Test load() creates new event loop when called from async context."""
+@pytest.mark.asyncio
+async def test_sync_load_raises_from_async_context():
+    """load() must raise RuntimeError even when called from an async context."""
     mock_session = create_mock_session()
     transport = AIOHTTPTransport(session=mock_session)
 
-    # Mock response
-    mock_response = Mock(spec=RequestsResponse)
-    mock_response.content = b"<wsdl/>"
-
-    # This should work even if there's already an event loop
-    with (
-        patch.object(transport, "get", new=AsyncMock(return_value=mock_response)),
-        patch("asyncio.new_event_loop") as mock_new_loop,
-    ):
-        mock_loop = Mock()
-        mock_loop.run_until_complete.return_value = mock_response
-        mock_new_loop.return_value = mock_loop
-
-        result = transport.load("http://example.com/wsdl")
-
-        # Should have created new loop
-        mock_new_loop.assert_called_once()
-        mock_loop.close.assert_called_once()
-        assert result == b"<wsdl/>"
+    with pytest.raises(RuntimeError, match=r"Synchronous load.* is not supported"):
+        transport.load("http://example.com/wsdl")
 
 
 @pytest.mark.asyncio
