@@ -32,6 +32,7 @@ from onvif.exceptions import ONVIFError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+    from pathlib import Path
 
 # The bundled WSDL files live under onvif/wsdl, not the default _WSDL_PATH
 # (which points one level above the package). Resolve the real directory so the
@@ -450,16 +451,16 @@ def test_get_definition_unsupported_service_without_xaddr() -> None:
 
 
 @pytest.fixture
-def _wsdl_scratch_dir(tmp_path):
+def _wsdl_scratch_dir(tmp_path: Path) -> None:
     """A scratch wsdl_dir prepared synchronously so async tests can use it."""
     (tmp_path / "devicemgmt.wsdl").write_text("<wsdl/>")
-    return tmp_path
 
 
 @pytest.mark.asyncio
-async def test_create_onvif_service_warms_wsdl_dir_cache(_wsdl_scratch_dir) -> None:
+@pytest.mark.usefixtures("_wsdl_scratch_dir")
+async def test_create_onvif_service_warms_wsdl_dir_cache(tmp_path: Path) -> None:
     """A previously unseen wsdl_dir is scanned off the event loop on first use."""
-    wsdl_dir = str(_wsdl_scratch_dir)
+    wsdl_dir = str(tmp_path)
     assert wsdl_dir not in _WSDL_DIR_FILES
 
     async with create_test_camera(wsdl_dir=wsdl_dir) as cam:
