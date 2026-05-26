@@ -14,12 +14,19 @@ extend-select = [
   "DTZ", # flake8-datetimez
   "EM", # flake8-errmsg
   "I", # isort
+  "PL", # pylint
   "RUF", # ruff-specific
   "S", # flake8-bandit
   "SIM", # flake8-simplify
   "TC", # flake8-type-checking
 ]
 ignore = [
+  "PLR0911", # too many return statements
+  "PLR0912", # too many branches
+  "PLR0913", # too many arguments
+  "PLR0915", # too many statements
+  "PLR2004", # magic value used in comparison
+  "PLW2901", # loop variable overwritten
   # Re-enable once the rules these noqa directives reference (A, F841) are
   # selected; until then RUF100 would force deleting noqa comments we'll need
   # back.

@@ -429,9 +429,7 @@ async def test_cookies_in_httpx_response():
     # Mock cookies
     mock_cookie = Mock()
     mock_cookie.value = "abc123"
-    mock_cookie.get.side_effect = lambda k: {"domain": ".example.com", "path": "/"}.get(
-        k
-    )
+    mock_cookie.get.side_effect = {"domain": ".example.com", "path": "/"}.get
 
     mock_cookies = Mock()
     mock_cookies.items.return_value = [("session", mock_cookie)]
