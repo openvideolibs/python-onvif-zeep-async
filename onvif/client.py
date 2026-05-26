@@ -470,33 +470,25 @@ class ONVIFService:
         APIs detail(API name, request parameters,
         response parameters, parameter types, etc...)
         """
-
-        def service_wrapper(func):
-            """Wrap service call."""
-
-            @safe_func
-            def wrapped(params=None):
-                def call(params=None):
-                    # No params
-                    params = {} if params is None else ONVIFService.to_dict(params)
-                    try:
-                        ret = func(**params)
-                    except TypeError:
-                        ret = func(params)
-                    return ret
-
-                return call(params)
-
-            return wrapped
-
-        builtin = name.startswith("__") and name.endswith("__")
-        if builtin:
+        if name.startswith("__") and name.endswith("__"):
             return self.__dict__[name]
         if name.startswith("authless_"):
-            return service_wrapper(
-                getattr(self.ws_client_authless, name.removeprefix("authless_"))
-            )
-        return service_wrapper(getattr(self.ws_client, name))
+            target = self.ws_client_authless
+            op_name = name.removeprefix("authless_")
+        else:
+            target = self.ws_client
+            op_name = name
+        func = getattr(target, op_name)
+
+        @safe_func
+        def wrapped(params=None):
+            params = {} if params is None else ONVIFService.to_dict(params)
+            try:
+                return func(**params)
+            except TypeError:
+                return func(params)
+
+        return wrapped
 
 
 class ONVIFCamera:
