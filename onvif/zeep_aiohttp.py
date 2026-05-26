@@ -161,8 +161,6 @@ class AIOHTTPTransport(Transport):
                 response.status,
                 content,
             )
-
-            return response, content
         except RuntimeError as exc:
             # Handle RuntimeError which may occur if the session is closed
             msg = f"Failed to post to {address}: {exc}"
@@ -170,6 +168,8 @@ class AIOHTTPTransport(Transport):
         except TimeoutError as exc:
             msg = f"Request to {address} timed out"
             raise TimeoutError(msg) from exc
+        else:
+            return response, content
 
     async def post(
         self, address: str, message: str, headers: dict[str, str]

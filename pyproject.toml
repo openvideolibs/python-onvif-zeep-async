@@ -20,6 +20,7 @@ extend-select = [
   "SIM", # flake8-simplify
   "T20", # flake8-print
   "TC", # flake8-type-checking
+  "TRY", # tryceratops
 ]
 ignore = [
   "PLR0911", # too many return statements
@@ -28,6 +29,7 @@ ignore = [
   "PLR0915", # too many statements
   "PLR2004", # magic value used in comparison
   "PLW2901", # loop variable overwritten
+  "TRY003", # long messages outside exception class
   # Re-enable once the rules these noqa directives reference (A, F841) are
   # selected; until then RUF100 would force deleting noqa comments we'll need
   # back.
