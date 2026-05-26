@@ -106,7 +106,6 @@ class DisconnectingHTTPProtocol(asyncio.Protocol):
 
     def connection_lost(self, exc: Exception | None) -> None:
         """Called when the connection is lost."""
-        pass
 
 
 class DisconnectingServer:
