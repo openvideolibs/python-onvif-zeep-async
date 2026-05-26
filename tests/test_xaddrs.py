@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -207,6 +208,66 @@ async def test_update_xaddrs_skips_malformed_capability_entries(
     assert MEDIA_NS not in camera.xaddrs
     # ...while the well-formed Events entry is still discovered.
     assert camera.xaddrs[EVENTS_NS] == "http://192.168.1.100/onvif/events_service"
+
+
+@pytest.mark.asyncio
+async def test_update_xaddrs_logs_malformed_capabilities_at_debug(
+    camera: ONVIFCamera,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Malformed capability entries log at DEBUG -- not as an exception traceback."""
+    bad_caps = {
+        "Media": {"foo": "bar"},  # missing XAddr -> KeyError -> debug log
+        "Events": {"XAddr": "http://192.168.1.100/onvif/events_service"},
+    }
+    devicemgmt = _mock_devicemgmt(get_services=AsyncMock(side_effect=Fault("x")))
+    devicemgmt.GetCapabilities = AsyncMock(return_value=bad_caps)
+    with (
+        patch.object(
+            camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+        ),
+        caplog.at_level(logging.DEBUG, logger="onvif.client"),
+    ):
+        await camera.update_xaddrs()
+
+    # No ERROR/EXCEPTION-level records: malformed entries are an expected
+    # condition, not a bug-surfacing crash.
+    high_severity = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert high_severity == []
+    # The skip is still observable in debug output so operators can diagnose.
+    assert any(
+        r.levelno == logging.DEBUG and "Media" in r.getMessage() for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_xaddrs_propagates_unexpected_capability_errors(
+    camera: ONVIFCamera,
+) -> None:
+    """Unexpected exception types from capability lookup are not swallowed.
+
+    Narrow handling catches only the parse-error shapes (KeyError/TypeError/
+    AttributeError); anything else is a genuine bug and must surface so it
+    can be diagnosed rather than hide behind a log line.
+    """
+
+    class _ExplodingCapability(dict):
+        def __getitem__(self, key):
+            if key == "XAddr":
+                msg = "boom"
+                raise RuntimeError(msg)
+            return super().__getitem__(key)
+
+    bad_caps = {"Media": _ExplodingCapability(XAddr="ignored")}
+    devicemgmt = _mock_devicemgmt(get_services=AsyncMock(side_effect=Fault("x")))
+    devicemgmt.GetCapabilities = AsyncMock(return_value=bad_caps)
+    with (
+        patch.object(
+            camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+        ),
+        pytest.raises(RuntimeError, match="boom"),
+    ):
+        await camera.update_xaddrs()
 
 
 @pytest.mark.asyncio

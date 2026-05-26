@@ -474,33 +474,25 @@ class ONVIFService:
         APIs detail(API name, request parameters,
         response parameters, parameter types, etc...)
         """
-
-        def service_wrapper(func):
-            """Wrap service call."""
-
-            @safe_func
-            def wrapped(params=None):
-                def call(params=None):
-                    # No params
-                    params = {} if params is None else ONVIFService.to_dict(params)
-                    try:
-                        ret = func(**params)
-                    except TypeError:
-                        ret = func(params)
-                    return ret
-
-                return call(params)
-
-            return wrapped
-
-        builtin = name.startswith("__") and name.endswith("__")
-        if builtin:
+        if name.startswith("__") and name.endswith("__"):
             return self.__dict__[name]
         if name.startswith("authless_"):
-            return service_wrapper(
-                getattr(self.ws_client_authless, name.removeprefix("authless_"))
-            )
-        return service_wrapper(getattr(self.ws_client, name))
+            target = self.ws_client_authless
+            op_name = name.removeprefix("authless_")
+        else:
+            target = self.ws_client
+            op_name = name
+        func = getattr(target, op_name)
+
+        @safe_func
+        def wrapped(params=None):
+            params = {} if params is None else ONVIFService.to_dict(params)
+            try:
+                return func(**params)
+            except TypeError:
+                return func(params)
+
+        return wrapped
 
 
 class ONVIFCamera:
@@ -713,12 +705,23 @@ class ONVIFCamera:
                 if name.lower() in SERVICES and capability is not None:
                     namespace = SERVICES[name.lower()]["ns"]
                     self.xaddrs[namespace] = normalize_url(capability["XAddr"])
-            except Exception:
-                logger.exception("Unexpected service type")
+            except (KeyError, TypeError, AttributeError) as err:
+                # Narrow to the parse-error shapes a malformed capability
+                # entry can produce (missing XAddr, non-string key, non-dict
+                # capability). Any other exception is a genuine bug and must
+                # propagate rather than hide behind a log line.
+                logger.debug(
+                    "%s: Skipping malformed capability %s: %s",
+                    self.host,
+                    name,
+                    err,
+                )
         try:
             self._capabilities = self.to_dict(capabilities)
-        except Exception:
-            logger.exception("Failed to parse capabilities")
+        except ONVIFError as err:
+            # to_dict is @safe_func, so any serialization failure surfaces as
+            # ONVIFError; catch that specifically so unrelated bugs propagate.
+            logger.debug("%s: Failed to parse capabilities: %s", self.host, err)
 
     def has_broken_relative_time(
         self,

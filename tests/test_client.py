@@ -228,6 +228,28 @@ def test_service_wrapper_no_params() -> None:
     ws_client.GetThing.assert_called_once_with()
 
 
+def test_service_wrapper_does_not_swallow_non_typeerror() -> None:
+    """A non-TypeError raised by the underlying op surfaces as ONVIFError.
+
+    The keyword/positional fallback must only react to TypeError, otherwise
+    legitimate signature-unrelated failures would be silently retried with
+    positional args and produce confusing downstream errors.
+    """
+    service = ONVIFService.__new__(ONVIFService)
+    msg = "underlying failure"
+
+    def operation(**_kwargs):
+        raise ValueError(msg)
+
+    ws_client = Mock()
+    ws_client.BrokenOp = operation
+    service.ws_client = ws_client
+
+    with pytest.raises(ONVIFError) as excinfo:
+        service.BrokenOp({"Foo": "bar"})
+    assert isinstance(excinfo.value.__cause__, ValueError)
+
+
 def test_getattr_unknown_dunder_raises_key_error() -> None:
     """Accessing an unset dunder attribute raises KeyError (not a wrapper)."""
     service = ONVIFService.__new__(ONVIFService)
