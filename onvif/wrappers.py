@@ -37,7 +37,7 @@ def retry_connection_error(
         we need to retry the operation.
         """
 
-        async def _async_wrap_connection_error_retry(  # type: ignore[return]
+        async def _async_wrap_connection_error_retry(  # type: ignore[return]  # noqa: RET503
             *args: P.args, **kwargs: P.kwargs
         ) -> T:
             logger.debug(
