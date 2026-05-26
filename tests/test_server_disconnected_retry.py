@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -625,7 +625,7 @@ async def test_onvif_service_retries_on_server_disconnect(no_cache: bool) -> Non
     ServerDisconnectedError surfaced to event listeners (PullMessages) instead
     of being retried as it was on the previous httpx-based release.
     """
-    wsdl = os.path.join(os.path.dirname(onvif.__file__), "wsdl", "devicemgmt.wsdl")
+    wsdl = str(Path(onvif.__file__).parent / "wsdl" / "devicemgmt.wsdl")
     service = ONVIFService(
         "http://example.com/onvif/device_service",
         "user",

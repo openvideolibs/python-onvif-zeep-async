@@ -1,6 +1,6 @@
 """Sphinx configuration for python-onvif-zeep-async documentation."""
 
-import os
+from pathlib import Path
 
 # -- Project information -----------------------------------------------------
 
@@ -8,8 +8,8 @@ project = "python-onvif-zeep-async"
 author = "Cherish Chen"
 copyright = "Cherish Chen"  # noqa: A001
 
-_version_path = os.path.join(os.path.dirname(__file__), "..", "onvif", "version.txt")
-with open(_version_path) as _version_file:
+_version_path = Path(__file__).parent / ".." / "onvif" / "version.txt"
+with _version_path.open(encoding="utf-8") as _version_file:
     release = _version_file.read().strip()
 version = release
 

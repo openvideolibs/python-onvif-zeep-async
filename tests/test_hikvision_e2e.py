@@ -10,7 +10,7 @@ Hikvision IP camera. They are deliberately "end to end": nothing inside
 from __future__ import annotations
 
 import datetime as dt
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -25,7 +25,7 @@ from onvif import ONVIFCamera
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-WSDL_DIR = os.path.join(os.path.dirname(onvif.__file__), "wsdl")
+WSDL_DIR = str(Path(onvif.__file__).parent / "wsdl")
 DIGEST_TYPE = (
     "http://docs.oasis-open.org/wss/2004/01/"
     "oasis-200401-wss-username-token-profile-1.0#PasswordDigest"

@@ -11,8 +11,8 @@ loading. The zeep/aiohttp dependencies they delegate to are mocked.
 from __future__ import annotations
 
 import datetime as dt
-import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -32,12 +32,11 @@ from onvif.exceptions import ONVIFError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-    from pathlib import Path
 
 # The bundled WSDL files live under onvif/wsdl, not the default _WSDL_PATH
 # (which points one level above the package). Resolve the real directory so the
 # get_definition() tests can exercise the on-disk path checks.
-_REAL_WSDL_DIR = os.path.join(os.path.dirname(onvif.client.__file__), "wsdl")
+_REAL_WSDL_DIR = str(Path(onvif.client.__file__).parent / "wsdl")
 
 
 @asynccontextmanager
@@ -147,7 +146,7 @@ async def test_setup_attaches_shared_sqlite_cache_when_caching() -> None:
     Aborts setup() right after the cache assignment so the test does not need
     to mock the rest of zeep's binding/namespace plumbing.
     """
-    wsdl = os.path.join(_REAL_WSDL_DIR, "devicemgmt.wsdl")
+    wsdl = str(Path(_REAL_WSDL_DIR) / "devicemgmt.wsdl")
     fake_cache = Mock()
     stop = RuntimeError("stop after cache assignment")
 
@@ -179,7 +178,7 @@ async def test_setup_attaches_shared_sqlite_cache_when_caching() -> None:
 @pytest.mark.asyncio
 async def test_setup_leaves_cache_none_when_no_cache_is_true() -> None:
     """no_cache=True must not pull in the shared SqliteCache during setup()."""
-    wsdl = os.path.join(_REAL_WSDL_DIR, "devicemgmt.wsdl")
+    wsdl = str(Path(_REAL_WSDL_DIR) / "devicemgmt.wsdl")
     stop = RuntimeError("stop after cache check")
     service = ONVIFService("http://a/", "u", "p", wsdl, no_cache=True)
     try:
