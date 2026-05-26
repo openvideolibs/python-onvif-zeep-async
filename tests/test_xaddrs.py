@@ -60,7 +60,7 @@ def _services_response() -> list[Mock]:
 
 @asynccontextmanager
 async def _create_camera() -> AsyncGenerator[ONVIFCamera]:
-    cam = ONVIFCamera("192.168.1.100", 80, "admin", "password", wsdl_dir=WSDL_DIR)  # noqa: S106
+    cam = ONVIFCamera("192.168.1.100", 80, "admin", "password", wsdl_dir=WSDL_DIR)
     try:
         yield cam
     finally:
@@ -273,7 +273,7 @@ async def test_update_xaddrs_adjust_time_retries_with_auth_on_fault() -> None:
         "192.168.1.100",
         80,
         "admin",
-        "password",  # noqa: S106
+        "password",
         wsdl_dir=WSDL_DIR,
         adjust_time=True,
     )

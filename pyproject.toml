@@ -15,14 +15,22 @@ extend-select = [
   "EM", # flake8-errmsg
   "I", # isort
   "RUF", # ruff-specific
+  "S", # flake8-bandit
   "SIM", # flake8-simplify
   "TC", # flake8-type-checking
 ]
 ignore = [
-  # Re-enable once the rules these noqa directives reference (S, A, F841) are
+  # Re-enable once the rules these noqa directives reference (A, F841) are
   # selected; until then RUF100 would force deleting noqa comments we'll need
   # back.
   "RUF100",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "S101", # asserts in tests
+  "S105", # hardcoded password strings
+  "S106", # hardcoded passwords passed as args
 ]
 
 [build-system]

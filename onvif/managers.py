@@ -84,7 +84,7 @@ class BaseManager:
         """Stop the manager."""
         logger.debug("%s: Stop the notification manager", self._device.host)
         self._cancel_renewals()
-        assert self._subscription, "Call start first"
+        assert self._subscription, "Call start first"  # noqa: S101
         await self._subscription.Unsubscribe()
 
     async def shutdown(self) -> None:
