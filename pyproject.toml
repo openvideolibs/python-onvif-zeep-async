@@ -26,6 +26,7 @@ extend-select = [
   "T20", # flake8-print
   "TC", # flake8-type-checking
   "TRY", # tryceratops
+  "UP", # pyupgrade
 ]
 ignore = [
   "PLR0911", # too many return statements
