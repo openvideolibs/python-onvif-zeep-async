@@ -120,11 +120,17 @@ _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
 
 def safe_func(func):
-    """Ensure methods to raise an ONVIFError Exception when some thing was wrong."""
+    """Ensure methods to raise an ONVIFError Exception when some thing was wrong.
+
+    ONVIFError (and subclasses like ONVIFTimeoutError / ONVIFAuthError) are
+    re-raised unchanged so callers can branch on the specific subtype.
+    """
 
     def wrapped(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except ONVIFError:
+            raise
         except Exception as err:
             raise ONVIFError(err) from err
 

@@ -611,9 +611,11 @@ def test_safe_func_passes_through_onvif_timeout_error() -> None:
     contract.
     """
 
+    msg = "camera unresponsive"
+
     @onvif.client.safe_func
     def raises_timeout() -> None:
-        raise ONVIFTimeoutError("camera unresponsive")
+        raise ONVIFTimeoutError(msg)
 
     with pytest.raises(ONVIFTimeoutError):
         raises_timeout()
@@ -622,9 +624,11 @@ def test_safe_func_passes_through_onvif_timeout_error() -> None:
 def test_safe_func_passes_through_onvif_auth_error() -> None:
     """safe_func must not downgrade ONVIFAuthError to base ONVIFError."""
 
+    msg = "bad credentials"
+
     @onvif.client.safe_func
     def raises_auth() -> None:
-        raise ONVIFAuthError("bad credentials")
+        raise ONVIFAuthError(msg)
 
     with pytest.raises(ONVIFAuthError):
         raises_auth()
@@ -647,9 +651,11 @@ def test_safe_func_passes_through_base_onvif_error_unchanged() -> None:
 def test_safe_func_still_wraps_generic_exceptions() -> None:
     """safe_func should still convert non-ONVIF exceptions into ONVIFError."""
 
+    msg = "oops"
+
     @onvif.client.safe_func
     def raises_value_error() -> None:
-        raise ValueError("oops")
+        raise ValueError(msg)
 
     with pytest.raises(ONVIFError) as excinfo:
         raises_value_error()
