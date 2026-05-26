@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import onvif.client
 from onvif.client import _WSDL_DIR_FILES
 
 try:
@@ -39,19 +40,22 @@ def pytest_collection_modifyitems(
 
 
 @pytest.fixture(autouse=True)
-def _reset_wsdl_dir_cache() -> Iterator[None]:
-    """Snapshot _WSDL_DIR_FILES so each test starts from the import-time state.
+def _reset_onvif_client_caches() -> Iterator[None]:
+    """Snapshot module-level caches so each test starts from a known state.
 
-    The bundled wsdl directory is pre-warmed at module import; tests must not
-    leak entries (for example, tmp_path scratch dirs) into other tests, and
-    must not delete the bundled entry that subsequent tests rely on.
+    _WSDL_DIR_FILES is pre-warmed at import for the bundled wsdl directory;
+    tests must not leak tmp_path entries into other tests nor drop the bundled
+    entry. _SHARED_SQLITE_CACHE is lazily built on first setup() call; reset to
+    None so a test cannot observe a cache left behind by an earlier test.
     """
-    snapshot = dict(_WSDL_DIR_FILES)
+    wsdl_snapshot = dict(_WSDL_DIR_FILES)
+    sqlite_snapshot = onvif.client._SHARED_SQLITE_CACHE
     try:
         yield
     finally:
         _WSDL_DIR_FILES.clear()
-        _WSDL_DIR_FILES.update(snapshot)
+        _WSDL_DIR_FILES.update(wsdl_snapshot)
+        onvif.client._SHARED_SQLITE_CACHE = sqlite_snapshot
 
 
 @pytest.fixture(autouse=True)
