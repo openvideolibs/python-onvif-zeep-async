@@ -15,6 +15,7 @@ extend-select = [
   "DTZ", # flake8-datetimez
   "EM", # flake8-errmsg
   "I", # isort
+  "PERF", # Perflint
   "PL", # pylint
   "RET", # flake8-return
   "RUF", # ruff-specific

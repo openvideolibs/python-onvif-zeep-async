@@ -52,7 +52,7 @@ def retry_connection_error(
                         "Attempt %s/%s for %s", attempt + 1, attempts, func.__name__
                     )
                     return await func(*args, **kwargs)
-                except exception as ex:
+                except exception as ex:  # noqa: PERF203
                     #
                     # We should only need to retry on ServerDisconnectedError but some cameras
                     # are flakey and sometimes do not respond to the Renew request so we
