@@ -709,12 +709,23 @@ class ONVIFCamera:
                 if name.lower() in SERVICES and capability is not None:
                     namespace = SERVICES[name.lower()]["ns"]
                     self.xaddrs[namespace] = normalize_url(capability["XAddr"])
-            except Exception:
-                logger.exception("Unexpected service type")
+            except (KeyError, TypeError, AttributeError) as err:
+                # Narrow to the parse-error shapes a malformed capability
+                # entry can produce (missing XAddr, non-string key, non-dict
+                # capability). Any other exception is a genuine bug and must
+                # propagate rather than hide behind a log line.
+                logger.debug(
+                    "%s: Skipping malformed capability %s: %s",
+                    self.host,
+                    name,
+                    err,
+                )
         try:
             self._capabilities = self.to_dict(capabilities)
-        except Exception:
-            logger.exception("Failed to parse capabilities")
+        except ONVIFError as err:
+            # to_dict is @safe_func, so any serialization failure surfaces as
+            # ONVIFError; catch that specifically so unrelated bugs propagate.
+            logger.debug("%s: Failed to parse capabilities: %s", self.host, err)
 
     def has_broken_relative_time(
         self,
