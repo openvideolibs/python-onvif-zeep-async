@@ -487,7 +487,9 @@ class ONVIFService:
         if builtin:
             return self.__dict__[name]
         if name.startswith("authless_"):
-            return service_wrapper(getattr(self.ws_client_authless, name.split("_")[1]))
+            return service_wrapper(
+                getattr(self.ws_client_authless, name.removeprefix("authless_"))
+            )
         return service_wrapper(getattr(self.ws_client, name))
 
 
