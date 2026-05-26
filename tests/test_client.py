@@ -235,6 +235,40 @@ def test_getattr_unknown_dunder_raises_key_error() -> None:
         service.__not_a_real_dunder__  # noqa: B018
 
 
+def test_authless_dispatch_preserves_underscores_in_method_name() -> None:
+    """authless_<Method> must dispatch to the full suffix, not the chunk before the next underscore.
+
+    Regression: the previous implementation used name.split("_")[1], which
+    silently dropped everything after the first underscore in the operation
+    name. Any future authless call whose ONVIF op name contains an underscore
+    would resolve to the wrong attribute on ws_client_authless.
+    """
+    service = ONVIFService.__new__(ONVIFService)
+    ws_client_authless = Mock()
+    ws_client_authless.Get_Some_Method = Mock(return_value="full-name")
+    ws_client_authless.Get = Mock(return_value="first-chunk")
+    service.ws_client_authless = ws_client_authless
+
+    result = service.authless_Get_Some_Method()
+
+    assert result == "full-name"
+    ws_client_authless.Get_Some_Method.assert_called_once_with()
+    ws_client_authless.Get.assert_not_called()
+
+
+def test_authless_dispatch_existing_pascalcase_method_still_works() -> None:
+    """The common case (PascalCase, no underscores) continues to dispatch correctly."""
+    service = ONVIFService.__new__(ONVIFService)
+    ws_client_authless = Mock()
+    ws_client_authless.GetSystemDateAndTime = Mock(return_value="ok")
+    service.ws_client_authless = ws_client_authless
+
+    result = service.authless_GetSystemDateAndTime()
+
+    assert result == "ok"
+    ws_client_authless.GetSystemDateAndTime.assert_called_once_with()
+
+
 # --------------------------------------------------------------------------
 # ONVIFCamera.has_broken_relative_time
 # --------------------------------------------------------------------------
