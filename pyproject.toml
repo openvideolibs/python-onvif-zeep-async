@@ -18,6 +18,7 @@ extend-select = [
   "RUF", # ruff-specific
   "S", # flake8-bandit
   "SIM", # flake8-simplify
+  "T20", # flake8-print
   "TC", # flake8-type-checking
 ]
 ignore = [
@@ -38,6 +39,9 @@ ignore = [
   "S101", # asserts in tests
   "S105", # hardcoded password strings
   "S106", # hardcoded passwords passed as args
+]
+"examples/**" = [
+  "T20", # example scripts legitimately print to the console
 ]
 
 [build-system]
