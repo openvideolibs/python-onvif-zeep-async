@@ -17,11 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-_KNOWN_BLOCKING: frozenset[str] = frozenset(
-    {
-        "tests/test_server_disconnected_retry.py::test_multiple_sequential_requests_with_disconnects",
-    }
-)
+_KNOWN_BLOCKING: frozenset[str] = frozenset()
 
 
 def pytest_collection_modifyitems(

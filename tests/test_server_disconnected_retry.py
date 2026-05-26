@@ -249,7 +249,17 @@ async def test_retry_on_server_disconnect_with_mock_server(
 async def test_multiple_sequential_requests_with_disconnects(
     disconnecting_server: tuple[DisconnectingServer, str],
 ) -> None:
-    """Test multiple sequential requests with server disconnecting each time."""
+    """Sequential requests against a server that closes after each response.
+
+    The transport retries only the pre-write disconnect cases
+    (ServerDisconnectedError, ClientConnectionResetError) because those mean
+    the request bytes never reached the server. A mid-read kernel RST
+    (ClientOSError) can still surface when the client's response read races
+    the server's close, and we deliberately do not auto-retry that case to
+    avoid double-executing non-idempotent operations. The test therefore
+    tolerates a small number of ClientOSError failures and asserts the
+    transport stays usable across the iterations.
+    """
 
     server, base_url = disconnecting_server
 
@@ -258,19 +268,25 @@ async def test_multiple_sequential_requests_with_disconnects(
             session=session, verify_ssl=False
         )
 
-        # Create simple test envelope
         envelope = etree.Element("{http://test}TestRequest")
 
-        # Make 5 sequential requests with small delays
+        successes = 0
         for _ in range(5):
-            await asyncio.sleep(0)  # Ensure previous connection is closed
-            result = await transport.post_xml(
-                f"{base_url}/onvif/device_service", envelope, {}
-            )
+            await asyncio.sleep(0)
+            try:
+                result = await transport.post_xml(
+                    f"{base_url}/onvif/device_service", envelope, {}
+                )
+            except aiohttp.ClientOSError:
+                continue
             assert result.status_code == 200
+            successes += 1
 
-        # Each request should succeed, potentially with retries
-        assert server.request_count >= 5
+        # Most iterations should succeed; the transport must stay usable even
+        # when a few mid-read RSTs surface. server.request_count covers retries
+        # too, so it can exceed the success count.
+        assert successes >= 3
+        assert server.request_count >= successes
 
 
 @pytest.mark.asyncio
@@ -368,6 +384,71 @@ async def test_post_xml_with_retry_decorator_succeeds() -> None:
     # Should be called twice (initial + retry)
     assert mock_session.post.call_count == 2
     assert result.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_post_xml_retries_on_client_connection_reset() -> None:
+    """ClientConnectionResetError ('Cannot write to closing transport') is retried.
+
+    aiohttp raises this when the pooled socket is closing before any bytes
+    are written, so the request has not reached the server and a retry is
+    idempotency-safe (sibling case to ServerDisconnectedError).
+    """
+    mock_session = Mock(spec=ClientSession)
+    mock_session.timeout = Mock(total=30, sock_read=10)
+    transport = AsyncTransportProtocolErrorHandler(
+        session=mock_session, verify_ssl=False
+    )
+
+    mock_envelope = Mock()
+    mock_envelope.tag = "TestEnvelope"
+
+    mock_response = Mock()
+    mock_response.status = 200
+    mock_response.headers = {}
+    mock_response.cookies = {}
+    mock_response.charset = "utf-8"
+    mock_response.read = AsyncMock(return_value=b"<response/>")
+
+    mock_session.post = AsyncMock(
+        side_effect=[
+            aiohttp.ClientConnectionResetError("Cannot write to closing transport"),
+            mock_response,
+        ]
+    )
+
+    result = await transport.post_xml("http://example.com/onvif", mock_envelope, {})
+
+    assert mock_session.post.call_count == 2
+    assert result.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_etree_to_string")
+async def test_post_xml_does_not_retry_on_client_os_error() -> None:
+    """Mid-read ClientOSError is not retried because bytes already went out.
+
+    Retrying after the server may have processed the request risks duplicate
+    Subscribe calls or PullMessages losing the in-flight event batch.
+    """
+    mock_session = Mock(spec=ClientSession)
+    mock_session.timeout = Mock(total=30, sock_read=10)
+    transport = AsyncTransportProtocolErrorHandler(
+        session=mock_session, verify_ssl=False
+    )
+
+    mock_envelope = Mock()
+    mock_envelope.tag = "TestEnvelope"
+
+    mock_session.post = AsyncMock(
+        side_effect=aiohttp.ClientOSError("Connection reset by peer")
+    )
+
+    with pytest.raises(aiohttp.ClientOSError, match="Connection reset by peer"):
+        await transport.post_xml("http://example.com/onvif", mock_envelope, {})
+
+    assert mock_session.post.call_count == 1
 
 
 @pytest.mark.asyncio

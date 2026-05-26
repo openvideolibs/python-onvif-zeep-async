@@ -20,7 +20,7 @@ logger = logging.getLogger("onvif")
 
 def retry_connection_error(
     attempts: int = DEFAULT_ATTEMPTS,
-    exception: type[Exception] = aiohttp.ClientError,
+    exception: type[Exception] | tuple[type[Exception], ...] = aiohttp.ClientError,
     backoff: float | None = None,
 ) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Define a wrapper to retry on connection error."""
