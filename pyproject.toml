@@ -17,6 +17,7 @@ extend-select = [
   "G", # flake8-logging-format
   "I", # isort
   "PERF", # Perflint
+  "PIE", # flake8-pie
   "PL", # pylint
   "PYI", # flake8-pyi
   "RET", # flake8-return
