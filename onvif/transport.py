@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os.path
+from pathlib import Path
 
 from zeep.transports import Transport
 
@@ -17,7 +17,7 @@ class AsyncSafeTransport(Transport):
         if not path_isfile(url):
             msg = f"Loading {url} is not supported in async mode"
             raise RuntimeError(msg)
-        with open(os.path.expanduser(url), "rb") as fh:
+        with Path(url).expanduser().open("rb") as fh:
             return fh.read()
 
 

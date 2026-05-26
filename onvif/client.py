@@ -6,6 +6,7 @@ import asyncio
 import datetime as dt
 import logging
 import os.path
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import aiohttp
@@ -51,7 +52,7 @@ _SENTINEL = object()
 # Default wsdl_dir for ONVIFCamera. Points at the WSDL files bundled with the
 # package (onvif/wsdl); historically this was off by one level and pointed at a
 # directory that did not exist, which silently forced every caller to override.
-_WSDL_PATH = os.path.join(os.path.dirname(__file__), "wsdl")
+_WSDL_PATH = str(Path(__file__).parent / "wsdl")
 # Names of regular files in each wsdl_dir, populated lazily off the event loop
 # on first use so the directory scan stays out of the asyncio path. None means
 # the cache could not be built and callers should fall back to path_isfile.
@@ -900,7 +901,7 @@ class ONVIFCamera:
         if port_type:
             namespace += "/" + port_type
 
-        wsdlpath = os.path.join(self.wsdl_dir, wsdl_file)
+        wsdlpath = str(Path(self.wsdl_dir) / wsdl_file)
         cached_files = _WSDL_DIR_FILES.get(self.wsdl_dir)
         exists = (
             wsdl_file in cached_files

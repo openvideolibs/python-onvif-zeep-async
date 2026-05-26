@@ -1,14 +1,14 @@
 """Package Setup."""
 
-import os
+from pathlib import Path
 
 from setuptools import find_packages, setup
 
-here = os.path.abspath(os.path.dirname(__file__))
-version_path = os.path.join(here, "onvif/version.txt")
-with open(version_path) as version_file:
+here = Path(__file__).parent.resolve()
+version_path = here / "onvif" / "version.txt"
+with version_path.open(encoding="utf-8") as version_file:
     version = version_file.read().strip()
-with open("README.rst") as readme_file:
+with Path("README.rst").open(encoding="utf-8") as readme_file:
     long_description = readme_file.read()
 
 requires = [

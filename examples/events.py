@@ -4,9 +4,9 @@ import argparse
 import asyncio
 import datetime as dt
 import logging
-import os.path
 import pprint
 import sys
+from pathlib import Path
 
 from aiohttp import web
 
@@ -36,7 +36,7 @@ async def run(args):
         args.port,
         args.username,
         args.password,
-        wsdl_dir=f"{os.path.dirname(onvif.__file__)}/wsdl/",
+        wsdl_dir=f"{Path(onvif.__file__).parent}/wsdl/",
     )
     await mycam.update_xaddrs()
 
