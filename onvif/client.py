@@ -86,22 +86,27 @@ _WSDL_DIR_FILES[_WSDL_PATH] = _list_wsdl_dir(_WSDL_PATH)
 
 # SqliteCache opens its sqlite file in __init__, which does blocking I/O.
 # Build one shared instance lazily off the event loop and reuse it across all
-# ONVIFService transports so the per-service setup() stays non-blocking. An
-# asyncio.Lock guards concurrent setup() calls so exactly one cache is built.
+# ONVIFService transports so the per-service setup() stays non-blocking. The
+# Lock is created lazily on first use (we cannot promise a running loop at
+# import time) and double-checked, so concurrent first-touch setup() calls
+# (for example, multiple cameras configured in parallel at startup) build
+# exactly one SqliteCache instead of racing through to_thread() twice. The
+# pre-Lock check-and-create is race-free because asyncio coroutines are
+# cooperatively scheduled within a single loop and there is no await between
+# the None check and the assignment.
 _SHARED_SQLITE_CACHE: SqliteCache | None = None
 _SHARED_SQLITE_CACHE_LOCK: asyncio.Lock | None = None
 
 
 async def _get_shared_sqlite_cache() -> SqliteCache:
     global _SHARED_SQLITE_CACHE, _SHARED_SQLITE_CACHE_LOCK  # noqa: PLW0603
-    if _SHARED_SQLITE_CACHE is not None:
-        return _SHARED_SQLITE_CACHE
-    if _SHARED_SQLITE_CACHE_LOCK is None:
-        _SHARED_SQLITE_CACHE_LOCK = asyncio.Lock()
-    async with _SHARED_SQLITE_CACHE_LOCK:
-        if _SHARED_SQLITE_CACHE is None:
-            _SHARED_SQLITE_CACHE = await asyncio.to_thread(SqliteCache)
-        return _SHARED_SQLITE_CACHE
+    if _SHARED_SQLITE_CACHE is None:
+        if _SHARED_SQLITE_CACHE_LOCK is None:
+            _SHARED_SQLITE_CACHE_LOCK = asyncio.Lock()
+        async with _SHARED_SQLITE_CACHE_LOCK:
+            if _SHARED_SQLITE_CACHE is None:
+                _SHARED_SQLITE_CACHE = await asyncio.to_thread(SqliteCache)
+    return _SHARED_SQLITE_CACHE
 
 
 _DEFAULT_TIMEOUT = 90

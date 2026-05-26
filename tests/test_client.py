@@ -22,6 +22,7 @@ import onvif.client
 from onvif import ONVIFCamera
 from onvif.client import (
     _WSDL_DIR_FILES,
+    _WSDL_PATH,
     ONVIFService,
     ZeepAsyncClient,
     _get_shared_sqlite_cache,
@@ -57,6 +58,13 @@ async def create_test_camera(
 # --------------------------------------------------------------------------
 # _list_wsdl_dir
 # --------------------------------------------------------------------------
+
+
+def test_bundled_wsdl_dir_is_prewarmed_at_import() -> None:
+    """Import-time pre-warm populates _WSDL_DIR_FILES for the bundled wsdl dir."""
+    cached = _WSDL_DIR_FILES.get(_WSDL_PATH)
+    assert cached is not None
+    assert "devicemgmt.wsdl" in cached
 
 
 def test_list_wsdl_dir_returns_regular_files() -> None:
@@ -129,6 +137,63 @@ def test_onvif_service_missing_wsdl_raises() -> None:
             "password",
             "/nonexistent/does-not-exist.wsdl",
         )
+
+
+@pytest.mark.asyncio
+async def test_setup_attaches_shared_sqlite_cache_when_caching() -> None:
+    """Two services with no_cache=False end up pointing at the same cache.
+
+    Aborts setup() right after the cache assignment so the test does not need
+    to mock the rest of zeep's binding/namespace plumbing.
+    """
+    wsdl = os.path.join(_REAL_WSDL_DIR, "devicemgmt.wsdl")
+    fake_cache = Mock()
+    stop = RuntimeError("stop after cache assignment")
+
+    service_a = ONVIFService("http://a/", "u", "p", wsdl, no_cache=False)
+    service_b = ONVIFService("http://b/", "u", "p", wsdl, no_cache=False)
+    try:
+        assert service_a.transport.cache is None
+        assert service_b.transport.cache is None
+
+        with (
+            patch(
+                "onvif.client._get_shared_sqlite_cache",
+                new=AsyncMock(return_value=fake_cache),
+            ),
+            patch("onvif.client._cached_document", new=AsyncMock(side_effect=stop)),
+        ):
+            with pytest.raises(RuntimeError):
+                await service_a.setup()
+            with pytest.raises(RuntimeError):
+                await service_b.setup()
+
+        assert service_a.transport.cache is fake_cache
+        assert service_b.transport.cache is fake_cache
+    finally:
+        await service_a.close()
+        await service_b.close()
+
+
+@pytest.mark.asyncio
+async def test_setup_leaves_cache_none_when_no_cache_is_true() -> None:
+    """no_cache=True must not pull in the shared SqliteCache during setup()."""
+    wsdl = os.path.join(_REAL_WSDL_DIR, "devicemgmt.wsdl")
+    stop = RuntimeError("stop after cache check")
+    service = ONVIFService("http://a/", "u", "p", wsdl, no_cache=True)
+    try:
+        get_cache = AsyncMock()
+        with (
+            patch("onvif.client._get_shared_sqlite_cache", new=get_cache),
+            patch("onvif.client._cached_document", new=AsyncMock(side_effect=stop)),
+            pytest.raises(RuntimeError),
+        ):
+            await service.setup()
+
+        assert service.transport.cache is None
+        get_cache.assert_not_called()
+    finally:
+        await service.close()
 
 
 def test_service_wrapper_falls_back_to_positional_args() -> None:
