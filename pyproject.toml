@@ -25,6 +25,7 @@ extend-select = [
   "G", # flake8-logging-format
   "I", # isort
   "ICN", # flake8-import-conventions
+  "INP", # flake8-no-pep420
   "ISC", # flake8-implicit-str-concat
   "LOG", # flake8-logging
   "N", # pep8-naming
@@ -67,12 +68,17 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
+  "INP", # tests directory is intentionally not a package
   "S101", # asserts in tests
   "S105", # hardcoded password strings
   "S106", # hardcoded passwords passed as args
 ]
 "examples/**" = [
+  "INP", # examples directory is intentionally not a package
   "T20", # example scripts legitimately print to the console
+]
+"docs/**" = [
+  "INP", # docs directory is intentionally not a package
 ]
 
 [build-system]
