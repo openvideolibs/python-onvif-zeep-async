@@ -16,6 +16,7 @@ extend-select = [
   "EM", # flake8-errmsg
   "I", # isort
   "PL", # pylint
+  "RET", # flake8-return
   "RUF", # ruff-specific
   "S", # flake8-bandit
   "SIM", # flake8-simplify

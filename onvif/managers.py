@@ -269,7 +269,7 @@ class NotificationManager(BaseManager):
         """Process a notification message."""
         if not self._operation:
             logger.debug("%s: Notifications not setup", self._device.host)
-            return
+            return None
         try:
             envelope = parse_xml(
                 content,  # type: ignore[arg-type]
