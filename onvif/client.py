@@ -49,6 +49,29 @@ logging.getLogger("zeep.client").setLevel(logging.CRITICAL)
 
 _SENTINEL = object()
 _WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl")
+# Names of regular files in each wsdl_dir, populated lazily off the event loop
+# on first use so the directory scan stays out of the asyncio path. None means
+# the cache could not be built and callers should fall back to path_isfile.
+_WSDL_DIR_FILES: dict[str, frozenset[str] | None] = {}
+
+
+def _list_wsdl_dir(wsdl_dir: str) -> frozenset[str] | None:
+    """Return the set of regular file names in wsdl_dir.
+
+    Returns an empty frozenset if the directory itself does not exist (then
+    every wsdl lookup correctly fails); returns None on any other OSError so
+    callers fall back to path_isfile rather than treating a permissions or
+    I/O failure as "wsdl not found".
+    """
+    try:
+        with os.scandir(wsdl_dir) as it:
+            return frozenset(entry.name for entry in it if entry.is_file())
+    except FileNotFoundError:
+        return frozenset()
+    except OSError:
+        return None
+
+
 _DEFAULT_TIMEOUT = 90
 _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
@@ -276,7 +299,12 @@ class ONVIFService:
         read_timeout: int | None = None,
         write_timeout: int | None = None,
     ) -> None:
-        if not path_isfile(url):
+        wsdl_dir, wsdl_name = os.path.split(url)
+        cached_files = _WSDL_DIR_FILES.get(wsdl_dir)
+        exists = (
+            wsdl_name in cached_files if cached_files is not None else path_isfile(url)
+        )
+        if not exists:
             msg = f"{url} doesn`t exist!"
             raise ONVIFError(msg)
 
@@ -810,7 +838,13 @@ class ONVIFCamera:
             namespace += "/" + port_type
 
         wsdlpath = os.path.join(self.wsdl_dir, wsdl_file)
-        if not path_isfile(wsdlpath):
+        cached_files = _WSDL_DIR_FILES.get(self.wsdl_dir)
+        exists = (
+            wsdl_file in cached_files
+            if cached_files is not None
+            else path_isfile(wsdlpath)
+        )
+        if not exists:
             msg = f"No such file: {wsdlpath}"
             raise ONVIFError(msg)
 
@@ -844,6 +878,15 @@ class ONVIFCamera:
         # Don't re-create bindings if the xaddr remains the same.
         # The xaddr can change when a new PullPointSubscription is created.
         binding_key = (name, port_type)
+
+        # The first call for a given wsdl_dir does a single os.listdir off the
+        # event loop and caches the result, so get_definition and
+        # ONVIFService.__init__ can answer "does this wsdl exist" without
+        # blocking I/O.
+        if self.wsdl_dir not in _WSDL_DIR_FILES:
+            _WSDL_DIR_FILES[self.wsdl_dir] = await asyncio.to_thread(
+                _list_wsdl_dir, self.wsdl_dir
+            )
 
         xaddr, wsdl_file, binding_name = self.get_definition(name, port_type)
 

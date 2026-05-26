@@ -20,7 +20,7 @@ import pytest
 
 import onvif.client
 from onvif import ONVIFCamera
-from onvif.client import ONVIFService, ZeepAsyncClient
+from onvif.client import ONVIFService, ZeepAsyncClient, _list_wsdl_dir
 from onvif.exceptions import ONVIFError
 
 if TYPE_CHECKING:
@@ -46,6 +46,35 @@ async def create_test_camera(
         yield cam
     finally:
         await cam.close()
+
+
+# --------------------------------------------------------------------------
+# _list_wsdl_dir
+# --------------------------------------------------------------------------
+
+
+def test_list_wsdl_dir_returns_regular_files() -> None:
+    """The bundled WSDL directory yields the wsdl file names as a set."""
+    files = _list_wsdl_dir(_REAL_WSDL_DIR)
+    assert files is not None
+    assert "devicemgmt.wsdl" in files
+
+
+def test_list_wsdl_dir_missing_returns_empty() -> None:
+    """A nonexistent directory yields an empty set so lookups fail cleanly."""
+    assert _list_wsdl_dir("/definitely/not/a/real/wsdl/dir") == frozenset()
+
+
+def test_list_wsdl_dir_unreadable_returns_none(tmp_path) -> None:
+    """A directory that scandir cannot read returns None to trigger fallback."""
+
+    msg = "blocked"
+
+    def _raise_permission(*_args: object, **_kwargs: object) -> None:
+        raise PermissionError(msg)
+
+    with patch("onvif.client.os.scandir", _raise_permission):
+        assert _list_wsdl_dir(str(tmp_path)) is None
 
 
 # --------------------------------------------------------------------------
