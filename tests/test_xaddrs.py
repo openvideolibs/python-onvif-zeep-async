@@ -222,9 +222,12 @@ async def test_update_xaddrs_logs_malformed_capabilities_at_debug(
     }
     devicemgmt = _mock_devicemgmt(get_services=AsyncMock(side_effect=Fault("x")))
     devicemgmt.GetCapabilities = AsyncMock(return_value=bad_caps)
-    with patch.object(
-        camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
-    ), caplog.at_level(logging.DEBUG, logger="onvif.client"):
+    with (
+        patch.object(
+            camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+        ),
+        caplog.at_level(logging.DEBUG, logger="onvif.client"),
+    ):
         await camera.update_xaddrs()
 
     # No ERROR/EXCEPTION-level records: malformed entries are an expected
@@ -233,8 +236,7 @@ async def test_update_xaddrs_logs_malformed_capabilities_at_debug(
     assert high_severity == []
     # The skip is still observable in debug output so operators can diagnose.
     assert any(
-        r.levelno == logging.DEBUG and "Media" in r.getMessage()
-        for r in caplog.records
+        r.levelno == logging.DEBUG and "Media" in r.getMessage() for r in caplog.records
     )
 
 
@@ -259,9 +261,12 @@ async def test_update_xaddrs_propagates_unexpected_capability_errors(
     bad_caps = {"Media": _ExplodingCapability(XAddr="ignored")}
     devicemgmt = _mock_devicemgmt(get_services=AsyncMock(side_effect=Fault("x")))
     devicemgmt.GetCapabilities = AsyncMock(return_value=bad_caps)
-    with patch.object(
-        camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
-    ), pytest.raises(RuntimeError, match="boom"):
+    with (
+        patch.object(
+            camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+        ),
+        pytest.raises(RuntimeError, match="boom"),
+    ):
         await camera.update_xaddrs()
 
 

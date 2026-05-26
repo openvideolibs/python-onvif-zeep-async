@@ -725,9 +725,7 @@ class ONVIFCamera:
         except ONVIFError as err:
             # to_dict is @safe_func, so any serialization failure surfaces as
             # ONVIFError; catch that specifically so unrelated bugs propagate.
-            logger.debug(
-                "%s: Failed to parse capabilities: %s", self.host, err
-            )
+            logger.debug("%s: Failed to parse capabilities: %s", self.host, err)
 
     def has_broken_relative_time(
         self,
