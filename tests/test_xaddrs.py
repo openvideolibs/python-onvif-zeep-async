@@ -230,13 +230,16 @@ async def test_update_xaddrs_logs_malformed_capabilities_at_debug(
     ):
         await camera.update_xaddrs()
 
-    # No ERROR/EXCEPTION-level records: malformed entries are an expected
-    # condition, not a bug-surfacing crash.
-    high_severity = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    # No ERROR/EXCEPTION-level records from the onvif logger: malformed
+    # entries are an expected condition, not a bug-surfacing crash. Filter by
+    # logger so unrelated noise (e.g. asyncio's GC warning for a stray
+    # ClientSession leaked by another test) cannot flake this assertion.
+    onvif_records = [r for r in caplog.records if r.name == "onvif"]
+    high_severity = [r for r in onvif_records if r.levelno >= logging.WARNING]
     assert high_severity == []
     # The skip is still observable in debug output so operators can diagnose.
     assert any(
-        r.levelno == logging.DEBUG and "Media" in r.getMessage() for r in caplog.records
+        r.levelno == logging.DEBUG and "Media" in r.getMessage() for r in onvif_records
     )
 
 
