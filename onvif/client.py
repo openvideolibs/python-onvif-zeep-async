@@ -7,7 +7,7 @@ import datetime as dt
 import logging
 import os.path
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
 import aiohttp
 import zeep.helpers
@@ -119,14 +119,18 @@ _WRITE_TIMEOUT = 90
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
 
-def safe_func(func):
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def safe_func(func: Callable[_P, _R]) -> Callable[_P, _R]:
     """Ensure methods to raise an ONVIFError Exception when some thing was wrong.
 
     ONVIFError (and subclasses like ONVIFTimeoutError / ONVIFAuthError) are
     re-raised unchanged so callers can branch on the specific subtype.
     """
 
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _R:
         try:
             return func(*args, **kwargs)
         except ONVIFError:
