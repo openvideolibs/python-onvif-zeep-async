@@ -19,15 +19,15 @@ Dependencies
 
 Install python-onvif-zeep-async
 -------------------------------
-**From Source**
-
-You should clone this repository and run setup.py::
-
-    cd python-onvif-zeep-async && python setup.py install
-
-Alternatively, you can run::
+From PyPI::
 
     pip install --upgrade onvif-zeep-async
+
+From source::
+
+    git clone https://github.com/openvideolibs/python-onvif-zeep-async.git
+    cd python-onvif-zeep-async
+    pip install .
 
 
 Getting Started
@@ -36,19 +36,24 @@ Getting Started
 Initialize an ONVIFCamera instance
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-::
+The WSDL files needed to talk to a camera are bundled with this package, so
+you do not need to download or pass them yourself::
 
+    import asyncio
     from onvif import ONVIFCamera
-    mycam = ONVIFCamera('192.168.0.2', 80, 'user', 'passwd', '/etc/onvif/wsdl/')
-    await mycam.update_xaddrs()
 
-Now, an ONVIFCamera instance is available. By default, a devicemgmt service is also available if everything is OK.
+    async def main():
+        mycam = ONVIFCamera('192.168.0.2', 80, 'user', 'passwd')
+        await mycam.update_xaddrs()
+        resp = await mycam.devicemgmt.GetHostname()
+        print(f"My camera's hostname: {resp.Name}")
 
-So, all operations defined in the WSDL document::
+    asyncio.run(main())
 
-/etc/onvif/wsdl/devicemgmt.wsdl
-
-are available.
+The ``ONVIFCamera`` constructor accepts an optional ``wsdl_dir`` argument if
+you need to point it at a custom WSDL directory; omit it to use the bundled
+files. After ``update_xaddrs()`` the ``devicemgmt`` service is available on
+the instance, exposing every operation defined in the device management WSDL.
 
 Get information from your camera
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -56,7 +61,7 @@ Get information from your camera
 
     # Get Hostname
     resp = await mycam.devicemgmt.GetHostname()
-    print 'My camera`s hostname: ' + str(resp.Name)
+    print(f"My camera's hostname: {resp.Name}")
 
     # Get system date and time
     dt = await mycam.devicemgmt.GetSystemDateAndTime()

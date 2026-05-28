@@ -329,18 +329,20 @@ class ONVIFService:
         PTZ Receiver RemoteDiscovery Recording Replay Search Extension
 
     >>> from onvif import ONVIFService
-    >>> device_service = ONVIFService('http://192.168.0.112/onvif/device_service',
-    ...                           'admin', 'foscam',
-    ...                           '/etc/onvif/wsdl/devicemgmt.wsdl')
-    >>> ret = device_service.GetHostname()
-    >>> print ret.FromDHCP
-    >>> print ret.Name
-    >>> device_service.SetHostname(dict(Name='newhostname'))
-    >>> ret = device_service.GetSystemDateAndTime()
-    >>> print ret.DaylightSavings
-    >>> print ret.TimeZone
+    >>> device_service = ONVIFService(
+    ...     'http://192.168.0.112/onvif/device_service',
+    ...     'admin', 'foscam',
+    ...     '/path/to/wsdl/devicemgmt.wsdl',
+    ... )
+    >>> ret = await device_service.GetHostname()
+    >>> print(ret.FromDHCP)
+    >>> print(ret.Name)
+    >>> await device_service.SetHostname(dict(Name='newhostname'))
+    >>> ret = await device_service.GetSystemDateAndTime()
+    >>> print(ret.DaylightSavings)
+    >>> print(ret.TimeZone)
     >>> dict_ret = device_service.to_dict(ret)
-    >>> print dict_ret['TimeZone']
+    >>> print(dict_ret['TimeZone'])
 
     There are two ways to pass parameter to services methods
     1. Dict
@@ -507,13 +509,14 @@ class ONVIFCamera:
 
     >>> from onvif import ONVIFCamera
     >>> mycam = ONVIFCamera('192.168.0.112', 80, 'admin', '12345')
-    >>> mycam.devicemgmt.GetServices(False)
+    >>> await mycam.update_xaddrs()
+    >>> await mycam.devicemgmt.GetServices(False)
     >>> media_service = mycam.create_media_service()
     >>> ptz_service = mycam.create_ptz_service()
     # Get PTZ Configuration:
-    >>> mycam.ptz.GetConfiguration()
+    >>> await mycam.ptz.GetConfiguration()
     # Another way:
-    >>> ptz_service.GetConfiguration()
+    >>> await ptz_service.GetConfiguration()
     """
 
     def __init__(
