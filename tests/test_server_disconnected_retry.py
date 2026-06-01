@@ -102,7 +102,7 @@ class DisconnectingHTTPProtocol(asyncio.Protocol):
 
         # Abruptly close connection after sending response
         # This simulates the problematic camera behavior
-        asyncio.get_event_loop().call_later(0.01, self.transport.close)
+        asyncio.get_running_loop().call_later(0.01, self.transport.close)
 
     def connection_lost(self, exc: Exception | None) -> None:
         """Called when the connection is lost."""
@@ -118,7 +118,7 @@ class DisconnectingServer:
 
     async def start(self, port: int = 0) -> str:
         """Start the mock server."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         # Create server with custom protocol
         self.server = await loop.create_server(
