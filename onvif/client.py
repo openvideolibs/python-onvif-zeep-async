@@ -247,7 +247,7 @@ async def _cached_document(url: str) -> Document:
     """Load external XML document from disk."""
     if url in _DOCUMENT_CACHE:
         return _DOCUMENT_CACHE[url]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _load_document() -> DocumentWithDeferredLoad:
         document = DocumentWithDeferredLoad(
@@ -420,7 +420,6 @@ class ONVIFService:
         self.zeep_client: ZeepAsyncClient | None = None
         self.ws_client: AsyncServiceProxy | None = None
         self.create_type: Callable | None = None
-        self.loop = asyncio.get_event_loop()
 
     async def setup(self):
         """Setup the transport."""

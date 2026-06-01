@@ -55,7 +55,7 @@ class BaseManager:
         self._interval = interval
         self._subscription: ONVIFService | None = None
         self._restart_or_renew_task: asyncio.Task | None = None
-        self._loop = asyncio.get_event_loop()
+        self._loop = asyncio.get_running_loop()
         self._shutdown = False
         self._subscription_lost_callback = subscription_lost_callback
         self._cancel_subscription_renew: asyncio.TimerHandle | None = None
