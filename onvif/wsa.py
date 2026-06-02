@@ -18,15 +18,22 @@ class WsAddressingIfMissingPlugin(Plugin):
 
     def egress(self, envelope, http_headers, operation, binding_options):
         """Apply the ws-addressing headers to the given envelope."""
+        # Only the events/notification/pullpoint WSDLs declare wsam/wsaw:Action;
+        # for those operations zeep populates ``operation.abstract.wsa_action``.
+        # Other ONVIF services (PTZ, media, devicemgmt, imaging, ...) do not
+        # declare a WSA action and do not need WSA headers -- emitting them
+        # anyway breaks some cameras (e.g. Meari PTZ Stop, issue #155) and is
+        # not what other ONVIF clients (ODM, VMS, ...) send for these
+        # operations.
+        wsa_action = operation.abstract.wsa_action
+        if not wsa_action:
+            return envelope, http_headers
+
         header = get_or_create_header(envelope)
         for elem in header:
             if (elem.prefix or "").startswith("wsa"):
                 # WSA header already exists
                 return envelope, http_headers
-
-        wsa_action = operation.abstract.wsa_action
-        if not wsa_action:
-            wsa_action = operation.soapaction
 
         headers = [
             WSA.Action(wsa_action),
