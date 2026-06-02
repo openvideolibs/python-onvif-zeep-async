@@ -735,9 +735,7 @@ async def test_notification_manager_start_rewrites_subscription_address_on_nat_o
     """NotificationManager also routes consumer addresses through _rewrite_url."""
     device = _make_device()
     device._rewrite_url = Mock(return_value="http://wan.example.com:9000/consumer")
-    mgr, _notify_service, _subscription, _operation = _make_notification_manager(
-        device
-    )
+    mgr, _notify_service, _subscription, _operation = _make_notification_manager(device)
 
     await mgr._start()
 
