@@ -16,6 +16,7 @@ from onvif.util import (
     is_auth_error,
     normalize_url,
     obscure_user_pass_url,
+    replace_host_port,
     stringify_onvif_error,
     strip_user_pass_url,
 )
@@ -58,6 +59,47 @@ async def test_normalize_url_with_missing_url():
     )
     result = operation.process_reply(envelope)
     assert normalize_url(result.SubscriptionReference.Address._value_1) is None
+
+
+def test_replace_host_port_basic():
+    # Standard host:port swap, scheme/path/query/fragment preserved.
+    assert (
+        replace_host_port(
+            "http://192.168.1.100/onvif/media_service", "wan.example.com", 8080
+        )
+        == "http://wan.example.com:8080/onvif/media_service"
+    )
+    assert (
+        replace_host_port(
+            "https://192.168.1.100:8443/onvif/media?x=1#frag", "203.0.113.5", 9000
+        )
+        == "https://203.0.113.5:9000/onvif/media?x=1#frag"
+    )
+
+
+def test_replace_host_port_ipv6_host_gets_bracketed():
+    # Bare IPv6 host is bracketed automatically; an already-bracketed host is
+    # left as-is rather than double-bracketed.
+    assert (
+        replace_host_port("http://192.168.1.100/x", "dead:beef::1", 80)
+        == "http://[dead:beef::1]:80/x"
+    )
+    assert (
+        replace_host_port("http://192.168.1.100/x", "[dead:beef::1]", 80)
+        == "http://[dead:beef::1]:80/x"
+    )
+
+
+def test_replace_host_port_no_op_on_empty_or_none():
+    assert replace_host_port(None, "h", 1) is None
+    assert replace_host_port("", "h", 1) == ""
+
+
+def test_replace_host_port_bytes_input_passthrough():
+    # urlparse on bytes returns ParseResultBytes -- we don't synthesize a netloc,
+    # we hand the original input back unchanged.
+    raw = b"http://1.2.3.4/x"
+    assert replace_host_port(raw, "h", 1) is raw
 
 
 def test_strip_user_pass_url():

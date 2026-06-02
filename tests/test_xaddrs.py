@@ -325,6 +325,87 @@ async def test_update_xaddrs_skips_malformed_service_entries(
 
 
 @pytest.mark.asyncio
+async def test_update_xaddrs_rewrites_get_services_xaddrs_when_nat_override() -> None:
+    """GetServices XAddrs adopt the constructor host:port when nat_override=True.
+
+    The camera advertises its LAN address (192.168.1.100) but the caller
+    connected via a NAT external host:port; nat_override rewrites every XAddr
+    so subsequent requests follow the same external path.
+    """
+    cam = ONVIFCamera(
+        "wan.example.com",
+        8080,
+        "admin",
+        "password",
+        wsdl_dir=WSDL_DIR,
+        nat_override=True,
+    )
+    devicemgmt = _mock_devicemgmt()
+    try:
+        with patch.object(
+            cam, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+        ):
+            await cam.update_xaddrs()
+    finally:
+        await cam.close()
+
+    assert (
+        cam.xaddrs[RECORDING_NS]
+        == "http://wan.example.com:8080/onvif/recording_service"
+    )
+    assert cam.xaddrs[MEDIA_NS] == "http://wan.example.com:8080/onvif/media_service"
+
+
+@pytest.mark.asyncio
+async def test_update_xaddrs_rewrites_get_capabilities_xaddrs_when_nat_override() -> (
+    None
+):
+    """GetCapabilities XAddrs also adopt the constructor host:port under NAT."""
+    cam = ONVIFCamera(
+        "203.0.113.5",
+        9000,
+        "admin",
+        "password",
+        wsdl_dir=WSDL_DIR,
+        nat_override=True,
+    )
+    # Force the GetCapabilities fallback path so we exercise the other site.
+    devicemgmt = _mock_devicemgmt(get_services=AsyncMock(side_effect=Fault("x")))
+    try:
+        with patch.object(
+            cam, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+        ):
+            await cam.update_xaddrs()
+    finally:
+        await cam.close()
+
+    assert cam.xaddrs[MEDIA_NS] == "http://203.0.113.5:9000/onvif/media_service"
+    assert cam.xaddrs[EVENTS_NS] == "http://203.0.113.5:9000/onvif/events_service"
+
+
+@pytest.mark.asyncio
+async def test_update_xaddrs_preserves_device_host_when_nat_override_disabled(
+    camera: ONVIFCamera,
+) -> None:
+    """Default behavior (nat_override=False) keeps the device-advertised XAddr.
+
+    Backwards-compatibility guard: existing on-LAN callers connect directly to
+    the host the camera advertises and must keep receiving it verbatim.
+    """
+    devicemgmt = _mock_devicemgmt()
+    with patch.object(
+        camera, "create_devicemgmt_service", AsyncMock(return_value=devicemgmt)
+    ):
+        await camera.update_xaddrs()
+
+    # Camera reports 192.168.1.100 in its GetServices response; even though the
+    # constructor was also given 192.168.1.100, the rewrite path is *not*
+    # invoked when nat_override is False, so the device's URL is the source of
+    # truth.
+    assert camera.xaddrs[MEDIA_NS] == "http://192.168.1.100/onvif/media_service"
+
+
+@pytest.mark.asyncio
 async def test_update_xaddrs_adjust_time_retries_with_auth_on_fault() -> None:
     """adjust_time retries the clock probe with auth when the authless call faults.
 

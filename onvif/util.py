@@ -43,6 +43,26 @@ def normalize_url(url: bytes | str | None) -> str | None:
     return url
 
 
+def replace_host_port(url: str | None, host: str, port: int) -> str | None:
+    """Rewrite the netloc of ``url`` to ``host:port``.
+
+    Cameras behind NAT advertise URLs containing their LAN address (the
+    ``XAddr`` returned from ``GetServices``/``GetCapabilities`` or the
+    snapshot URI), which is unreachable from outside the NAT. Callers that
+    connect via the external address pass it back through this helper so
+    subsequent requests follow the same external path the user authenticated
+    on. Scheme, path, params, query, and fragment are preserved; only the
+    netloc is replaced. IPv6 hosts are bracketed when not already.
+    """
+    if not url:
+        return url
+    parsed = urlparse(url)
+    if isinstance(parsed, ParseResultBytes):
+        return url
+    bracketed = host if host.startswith("[") else f"[{host}]" if ":" in host else host
+    return urlunparse(parsed._replace(netloc=f"{bracketed}:{port}"))
+
+
 def extract_subcodes_as_strings(subcodes: Any) -> list[str]:
     """Stringify ONVIF subcodes."""
     if isinstance(subcodes, list):

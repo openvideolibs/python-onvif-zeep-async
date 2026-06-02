@@ -31,6 +31,7 @@ from .util import (
     normalize_url,
     obscure_user_pass_url,
     path_isfile,
+    replace_host_port,
     strip_user_pass_url,
     utcnow,
 )
@@ -541,6 +542,7 @@ class ONVIFCamera:
         encrypt=True,
         no_cache=False,
         adjust_time=False,
+        nat_override: bool = False,
     ) -> None:
         os.environ.pop("http_proxy", None)
         os.environ.pop("https_proxy", None)
@@ -552,6 +554,11 @@ class ONVIFCamera:
         self.encrypt = encrypt
         self.no_cache = no_cache
         self.adjust_time = adjust_time
+        # When True, URLs the device returns (XAddrs, subscription addresses,
+        # snapshot URI) have their host:port rewritten to the host:port passed
+        # to this constructor. Required for cameras behind NAT, which advertise
+        # their LAN address in responses -- unreachable from outside the NAT.
+        self.nat_override = nat_override
         self.dt_diff = None
         self.xaddrs = {}
         self._has_broken_relative_timestamps: bool = False
@@ -565,6 +572,16 @@ class ONVIFCamera:
         self._snapshot_uris = {}
         self._snapshot_connector = TCPConnector(ssl=_NO_VERIFY_SSL_CONTEXT)
         self._snapshot_client = ClientSession(connector=self._snapshot_connector)
+
+    def _rewrite_url(self, url: str | None) -> str | None:
+        """Rewrite ``url`` to use this camera's host:port when nat_override is set.
+
+        No-op when ``nat_override`` is disabled (default), so existing callers
+        that connect on the LAN keep the device-advertised URL verbatim.
+        """
+        if not self.nat_override:
+            return url
+        return replace_host_port(url, self.host, self.port)
 
     async def get_capabilities(self) -> dict[str, Any] | None:
         """Get device capabilities.
@@ -699,7 +716,7 @@ class ONVIFCamera:
                 )
                 continue
             if namespace and xaddr:
-                self.xaddrs[namespace] = normalize_url(xaddr)
+                self.xaddrs[namespace] = self._rewrite_url(normalize_url(xaddr))
                 found = True
         return found
 
@@ -719,7 +736,9 @@ class ONVIFCamera:
             try:
                 if name.lower() in SERVICES and capability is not None:
                     namespace = SERVICES[name.lower()]["ns"]
-                    self.xaddrs[namespace] = normalize_url(capability["XAddr"])
+                    self.xaddrs[namespace] = self._rewrite_url(
+                        normalize_url(capability["XAddr"])
+                    )
             except (KeyError, TypeError, AttributeError) as err:
                 # Narrow to the parse-error shapes a malformed capability
                 # entry can produce (missing XAddr, non-string key, non-dict
@@ -846,7 +865,7 @@ class ONVIFCamera:
                 )
             else:
                 try:
-                    uri = normalize_url(result.Uri)
+                    uri = self._rewrite_url(normalize_url(result.Uri))
                 except (AttributeError, KeyError):
                     # AttributeError is raised when result.Uri is missing
                     # https://github.com/home-assistant/core/issues/135494
