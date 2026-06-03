@@ -59,7 +59,12 @@ def replace_host_port(url: str | None, host: str, port: int) -> str | None:
     parsed = urlparse(url)
     if isinstance(parsed, ParseResultBytes):
         return url
-    bracketed = host if host.startswith("[") else f"[{host}]" if ":" in host else host
+    if host.startswith("["):
+        bracketed = host
+    elif ":" in host:
+        bracketed = f"[{host}]"
+    else:
+        bracketed = host
     return urlunparse(parsed._replace(netloc=f"{bracketed}:{port}"))
 
 
