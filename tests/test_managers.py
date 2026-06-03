@@ -472,6 +472,27 @@ async def test_renew_or_restart_restarts_when_renew_fails() -> None:
 
 
 @pytest.mark.asyncio
+async def test_renew_or_restart_handles_restart_failure() -> None:
+    """A failing restart must not escape the fire-and-forget task.
+
+    `_renew_or_restart_subscription` runs as an unawaited asyncio.Task, so any
+    exception escaping the body surfaces as "Task exception was never
+    retrieved" in production logs. Renew already swallows RENEW_ERRORS; restart
+    must do the same and let the finally branch schedule the error retry.
+    """
+    mgr = await _make_base_manager()
+    mgr._loop = _mock_loop(now=1000.0)
+    mgr._renew_subscription = AsyncMock(return_value=None)
+    mgr._restart_subscription = AsyncMock(side_effect=aiohttp.ClientError())
+    mgr._schedule_subscription_renew = Mock()
+
+    await mgr._renew_or_restart_subscription()  # must not raise
+
+    expected = 1000.0 + SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR.total_seconds()
+    mgr._schedule_subscription_renew.assert_called_once_with(expected)
+
+
+@pytest.mark.asyncio
 async def test_renew_or_restart_uses_error_interval_on_total_failure() -> None:
     mgr = await _make_base_manager()
     mgr._loop = _mock_loop(now=1000.0)
