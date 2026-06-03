@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import zeep
 from zeep.exceptions import Fault
 from zeep.loader import parse_xml
 
+import onvif  # noqa: F401  -- side effect: applies the zeep_pythonvalue monkey patch
 from onvif.client import ONVIFCamera
 from onvif.settings import DEFAULT_SETTINGS
-from onvif.transport import ASYNC_TRANSPORT
+from onvif.transport import ASYNC_TRANSPORT, AsyncSafeTransport
 from onvif.util import (
     extract_subcodes_as_strings,
     is_auth_error,
@@ -171,3 +173,25 @@ def test_is_auth_error_message():
 def test_is_auth_error_not_auth():
     error = Fault("some other failure", subcodes=[_Subcode("ter:Other")])
     assert is_auth_error(error) is False
+
+
+def test_async_safe_transport_load_rejects_remote_url():
+    """AsyncSafeTransport.load() refuses anything that isn't a local file path."""
+    transport = AsyncSafeTransport()
+    with pytest.raises(RuntimeError, match="not supported in async mode"):
+        transport.load("http://example.com/onvif.wsdl")
+
+
+def test_async_safe_transport_load_reads_local_file(tmp_path: Path) -> None:
+    """AsyncSafeTransport.load() returns bytes for a real on-disk file."""
+    wsdl = tmp_path / "fake.wsdl"
+    wsdl.write_bytes(b"<wsdl/>")
+    assert AsyncSafeTransport().load(str(wsdl)) == b"<wsdl/>"
+
+
+def test_zeep_pythonvalue_monkey_patch_returns_value() -> None:
+    """Importing onvif installs a zeep monkey patch that returns xmlvalue as-is."""
+    sentinel = "raw-xml-string"
+    assert (
+        zeep.xsd.simple.AnySimpleType.pythonvalue(None, sentinel) == sentinel  # type: ignore[arg-type]
+    )
