@@ -995,7 +995,9 @@ async def test_post_runtime_error_is_rewrapped():
 
     transport = AIOHTTPTransport(session=mock_session)
 
-    with pytest.raises(RuntimeError, match=r"Failed to post to http://example\.com/svc"):
+    with pytest.raises(
+        RuntimeError, match=r"Failed to post to http://example\.com/svc"
+    ):
         await transport.post("http://example.com/svc", "<r/>", {})
 
 
