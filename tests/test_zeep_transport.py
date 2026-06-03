@@ -984,3 +984,46 @@ async def test_http_error_responses_no_exception():
     assert isinstance(result, RequestsResponse)
     assert result.status_code == 500
     assert result.content == b"<error>Server Error</error>"
+
+
+@pytest.mark.asyncio
+async def test_post_runtime_error_is_rewrapped():
+    """RuntimeError from a closed session is rewrapped with the target URL."""
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.timeout = Mock(total=300, sock_read=None)
+    mock_session.post = AsyncMock(side_effect=RuntimeError("Session is closed"))
+
+    transport = AIOHTTPTransport(session=mock_session)
+
+    with pytest.raises(
+        RuntimeError, match=r"Failed to post to http://example\.com/svc"
+    ):
+        await transport.post("http://example.com/svc", "<r/>", {})
+
+
+@pytest.mark.asyncio
+async def test_get_runtime_error_is_rewrapped():
+    """RuntimeError from a closed session in GET is rewrapped with the URL."""
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.timeout = Mock(total=300, sock_read=None)
+    mock_session.get = AsyncMock(side_effect=RuntimeError("Session is closed"))
+
+    transport = AIOHTTPTransport(session=mock_session)
+
+    with pytest.raises(
+        RuntimeError, match=r"Failed to get from http://example\.com/wsdl"
+    ):
+        await transport.get("http://example.com/wsdl")
+
+
+@pytest.mark.asyncio
+async def test_get_timeout_is_rewrapped():
+    """TimeoutError in GET is rewrapped with the target URL."""
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.timeout = Mock(total=300, sock_read=None)
+    mock_session.get = AsyncMock(side_effect=TimeoutError())
+
+    transport = AIOHTTPTransport(session=mock_session)
+
+    with pytest.raises(TimeoutError, match=r"Request to http://example\.com/wsdl"):
+        await transport.get("http://example.com/wsdl")

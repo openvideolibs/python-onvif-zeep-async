@@ -122,3 +122,30 @@ def test_fix_time_overflow() -> None:
 def test_unfixable_time_overflow() -> None:
     with pytest.raises(ValueError, match="Unrecognised ISO 8601 time format"):
         assert ForgivingTime().pythonvalue("999:00:00")
+
+
+def test_datetime_overflow_fix_then_unparseable() -> None:
+    """Overflow fix succeeds but the post-fix datetime parse still fails.
+
+    Exercises the final ``ciso8601.parse_datetime(value)`` re-raise in
+    ``FastDateTime.pythonvalue``: ``_try_parse_datetime`` returns ``None`` both
+    before and after overflow correction, so the code falls through and lets
+    ciso8601 raise the original ValueError.
+    """
+    # Month 13 + day 45 are invalid, so neither the raw nor the time-corrected
+    # variant parses; the overflow fixer itself succeeds because the time
+    # positions are all digits separated by ':'.
+    with pytest.raises(ValueError, match="month"):
+        FastDateTime().pythonvalue("2024-13-45T25:00:00Z")
+
+
+def test_time_overflow_fix_then_unparseable() -> None:
+    """Overflow fix succeeds but the post-fix datetime parse still fails.
+
+    Exercises the final ``isodate.parse_time(value)`` re-raise in
+    ``ForgivingTime.pythonvalue``: a junk trailer after the time digits keeps
+    the corrected ``2024-01-15T<fixed>Z`` string unparseable, falling through
+    to isodate which raises the original ValueError.
+    """
+    with pytest.raises(ValueError, match="ISO 8601 time format"):
+        ForgivingTime().pythonvalue("99:99:99-not-a-time")
