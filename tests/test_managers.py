@@ -511,6 +511,66 @@ async def test_renew_or_restart_uses_error_interval_on_total_failure() -> None:
     mgr._schedule_subscription_renew.assert_called_once_with(expected)
 
 
+@pytest.mark.asyncio
+async def test_renew_or_restart_does_not_reschedule_when_shutdown_mid_flight() -> None:
+    """A shutdown mid-renewal must not re-arm the renewal timer.
+
+    shutdown() sets ``_shutdown`` and then cancels this fire-and-forget task.
+    The resulting CancelledError still runs the ``finally`` block, so without a
+    guard the renewal timer is rescheduled *after* teardown -- contradicting the
+    "irreversible" shutdown contract and leaking a live TimerHandle.
+    """
+    mgr = await _make_base_manager()
+    mgr._schedule_subscription_renew = Mock()
+
+    async def _renew_then_cancelled() -> float | None:
+        # Mirror shutdown() cancelling the task while the renew await is in
+        # flight: _shutdown is already set, then CancelledError propagates.
+        mgr._shutdown = True
+        raise asyncio.CancelledError
+
+    mgr._renew_subscription = _renew_then_cancelled
+
+    with pytest.raises(asyncio.CancelledError):
+        await mgr._renew_or_restart_subscription()
+
+    mgr._schedule_subscription_renew.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_leaves_no_renewal_armed_with_task_in_flight() -> None:
+    """End-to-end: shutdown() with an in-flight renewal leaves no live timer.
+
+    Runs against the real event loop so the cancelled task's ``finally`` block
+    actually executes during shutdown's teardown.
+    """
+    mgr = await _make_base_manager()
+    mgr._subscription = _make_subscription()
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_renew() -> float | None:
+        started.set()
+        await release.wait()  # block until the task is cancelled
+        return None
+
+    mgr._renew_subscription = _slow_renew
+
+    # Launch the fire-and-forget task the way the renewal timer would.
+    mgr._run_restart_or_renew()
+    await started.wait()
+    assert mgr._restart_or_renew_task is not None
+
+    await mgr.shutdown()
+    # Let the cancelled task settle and run its finally block.
+    await asyncio.sleep(0)
+
+    assert mgr._restart_or_renew_task.cancelled()
+    # No renewal timer must survive an irreversible shutdown.
+    assert mgr._cancel_subscription_renew is None
+
+
 # --------------------------------------------------------------------------
 # NotificationManager
 # --------------------------------------------------------------------------

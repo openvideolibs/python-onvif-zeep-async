@@ -203,11 +203,17 @@ class BaseManager:
                         stringify_onvif_error(err),
                     )
         finally:
-            self._schedule_subscription_renew(
-                renewal_call_at
-                or self._loop.time()
-                + SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR.total_seconds()
-            )
+            # Don't re-arm the renewal timer while the manager is being torn
+            # down. shutdown() sets _shutdown then cancels this task; the
+            # resulting CancelledError still runs this finally, so without the
+            # guard the timer is rescheduled *after* _cancel_renewals() ran,
+            # leaving a live TimerHandle behind an "irreversible" shutdown.
+            if not self._shutdown:
+                self._schedule_subscription_renew(
+                    renewal_call_at
+                    or self._loop.time()
+                    + SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR.total_seconds()
+                )
 
 
 class NotificationManager(BaseManager):
