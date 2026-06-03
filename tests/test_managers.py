@@ -209,6 +209,48 @@ async def test_stop_cancels_and_unsubscribes() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        Fault("camera gone"),
+        asyncio.TimeoutError(),
+        aiohttp.ClientError(),
+    ],
+)
+async def test_stop_swallows_unsubscribe_errors(error: Exception) -> None:
+    # Teardown is best-effort: an offline camera (the common reason a consumer
+    # is tearing the manager down) must not make stop()/shutdown() raise. The
+    # remote Unsubscribe is courtesy -- the subscription times out on the camera
+    # side regardless.
+    mgr = await _make_base_manager()
+    handle = Mock()
+    mgr._cancel_subscription_renew = handle
+    subscription = _make_subscription()
+    subscription.Unsubscribe = AsyncMock(side_effect=error)
+    mgr._subscription = subscription
+
+    await mgr.stop()  # must not raise
+
+    handle.cancel.assert_called_once()
+    subscription.Unsubscribe.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_completes_when_unsubscribe_fails() -> None:
+    mgr = await _make_base_manager()
+    task = Mock()
+    mgr._restart_or_renew_task = task
+    subscription = _make_subscription()
+    subscription.Unsubscribe = AsyncMock(side_effect=aiohttp.ClientError())
+    mgr._subscription = subscription
+
+    await mgr.shutdown()  # must not raise even though the camera is unreachable
+
+    assert mgr._shutdown is True
+    task.cancel.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_stop_without_subscription_raises() -> None:
     mgr = await _make_base_manager()
     # start() was never called, so there is no subscription to unsubscribe.
