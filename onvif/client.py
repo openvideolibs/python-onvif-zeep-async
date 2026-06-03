@@ -558,6 +558,12 @@ class ONVIFCamera:
         # snapshot URI) have their host:port rewritten to the host:port passed
         # to this constructor. Required for cameras behind NAT, which advertise
         # their LAN address in responses -- unreachable from outside the NAT.
+        #
+        # Assumes a single port-forward to the device: every advertised URL is
+        # forced to the constructor host:port, so a camera that serves services
+        # on separately-forwarded ports gets the wrong port for the others.
+        # RTSP stream URIs (GetStreamUri on the media service) are not covered;
+        # a NAT caller fetching the stream URI still gets the LAN address.
         self.nat_override = nat_override
         self.dt_diff = None
         self.xaddrs = {}
@@ -573,11 +579,14 @@ class ONVIFCamera:
         self._snapshot_connector = TCPConnector(ssl=_NO_VERIFY_SSL_CONTEXT)
         self._snapshot_client = ClientSession(connector=self._snapshot_connector)
 
-    def _rewrite_url(self, url: str | None) -> str | None:
+    def rewrite_url(self, url: str | None) -> str | None:
         """Rewrite ``url`` to use this camera's host:port when nat_override is set.
 
         No-op when ``nat_override`` is disabled (default), so existing callers
         that connect on the LAN keep the device-advertised URL verbatim.
+
+        Public because ``managers.py`` calls it across the class boundary to
+        rewrite subscription reference addresses.
         """
         if not self.nat_override:
             return url
@@ -716,7 +725,7 @@ class ONVIFCamera:
                 )
                 continue
             if namespace and xaddr:
-                self.xaddrs[namespace] = self._rewrite_url(normalize_url(xaddr))
+                self.xaddrs[namespace] = self.rewrite_url(normalize_url(xaddr))
                 found = True
         return found
 
@@ -736,7 +745,7 @@ class ONVIFCamera:
             try:
                 if name.lower() in SERVICES and capability is not None:
                     namespace = SERVICES[name.lower()]["ns"]
-                    self.xaddrs[namespace] = self._rewrite_url(
+                    self.xaddrs[namespace] = self.rewrite_url(
                         normalize_url(capability["XAddr"])
                     )
             except (KeyError, TypeError, AttributeError) as err:
@@ -865,7 +874,7 @@ class ONVIFCamera:
                 )
             else:
                 try:
-                    uri = self._rewrite_url(normalize_url(result.Uri))
+                    uri = self.rewrite_url(normalize_url(result.Uri))
                 except (AttributeError, KeyError):
                     # AttributeError is raised when result.Uri is missing
                     # https://github.com/home-assistant/core/issues/135494

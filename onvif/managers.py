@@ -243,7 +243,7 @@ class NotificationManager(BaseManager):
         )
         # pylint: disable=protected-access
         device.xaddrs["http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"] = (
-            device._rewrite_url(
+            device.rewrite_url(
                 normalize_url(result.SubscriptionReference.Address._value_1)
             )
         )
@@ -323,7 +323,7 @@ class PullPointManager(BaseManager):
         # pylint: disable=protected-access
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
-        ] = device._rewrite_url(
+        ] = device.rewrite_url(
             normalize_url(result.SubscriptionReference.Address._value_1)
         )
         # Create subscription manager

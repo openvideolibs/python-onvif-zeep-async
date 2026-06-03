@@ -53,6 +53,10 @@ def replace_host_port(url: str | None, host: str, port: int) -> str | None:
     subsequent requests follow the same external path the user authenticated
     on. Scheme, path, params, query, and fragment are preserved; only the
     netloc is replaced. IPv6 hosts are bracketed when not already.
+
+    Any ``user:pass@`` userinfo in the source URL is intentionally dropped,
+    since the whole netloc is replaced. ONVIF XAddrs never carry userinfo, so
+    this has no practical effect.
     """
     if not url:
         return url

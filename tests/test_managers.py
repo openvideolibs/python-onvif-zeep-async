@@ -61,11 +61,11 @@ def _make_device(host: str = "1.2.3.4") -> Mock:
     device.xaddrs = {}
     device.get_next_termination_time = Mock(return_value="PT60S")
     device.has_broken_relative_time = Mock(return_value=False)
-    # Managers run subscription addresses through device._rewrite_url so that
+    # Managers run subscription addresses through device.rewrite_url so that
     # nat_override can swap the device-advertised host for the externally
     # routable one. The default mock is a no-op pass-through so existing tests
     # observe the original URL (matching nat_override=False).
-    device._rewrite_url = Mock(side_effect=lambda url: url)
+    device.rewrite_url = Mock(side_effect=lambda url: url)
     return device
 
 
@@ -707,7 +707,7 @@ async def test_pullpoint_manager_start_renews_on_broken_relative_time() -> None:
 async def test_pullpoint_manager_start_rewrites_subscription_address_on_nat_override() -> (
     None
 ):
-    """Subscription addresses flow through device._rewrite_url for NAT support.
+    """Subscription addresses flow through device.rewrite_url for NAT support.
 
     When the device runs behind NAT it advertises the LAN address of the
     subscription endpoint; nat_override on ONVIFCamera replaces that with the
@@ -715,16 +715,16 @@ async def test_pullpoint_manager_start_rewrites_subscription_address_on_nat_over
     that rewrite to the device so the stored xaddr is externally reachable.
     """
     device = _make_device()
-    device._rewrite_url = Mock(return_value="http://wan.example.com:9000/rewritten")
+    device.rewrite_url = Mock(return_value="http://wan.example.com:9000/rewritten")
     mgr, _subscription, _pullpoint_service = _make_pullpoint_manager(device)
 
     await mgr._start()
 
     pullpoint_key = "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
-    # The manager handed the normalized address to _rewrite_url and stored the
+    # The manager handed the normalized address to rewrite_url and stored the
     # rewritten value; if the rewrite hook were bypassed, the original NAT'd
     # LAN address would remain and subsequent requests would fail to route.
-    device._rewrite_url.assert_called_once_with(NORMALIZED_ADDRESS)
+    device.rewrite_url.assert_called_once_with(NORMALIZED_ADDRESS)
     assert device.xaddrs[pullpoint_key] == "http://wan.example.com:9000/rewritten"
 
 
@@ -732,15 +732,15 @@ async def test_pullpoint_manager_start_rewrites_subscription_address_on_nat_over
 async def test_notification_manager_start_rewrites_subscription_address_on_nat_override() -> (
     None
 ):
-    """NotificationManager also routes consumer addresses through _rewrite_url."""
+    """NotificationManager also routes consumer addresses through rewrite_url."""
     device = _make_device()
-    device._rewrite_url = Mock(return_value="http://wan.example.com:9000/consumer")
+    device.rewrite_url = Mock(return_value="http://wan.example.com:9000/consumer")
     mgr, _notify_service, _subscription, _operation = _make_notification_manager(device)
 
     await mgr._start()
 
     consumer_key = "http://www.onvif.org/ver10/events/wsdl/NotificationConsumer"
-    device._rewrite_url.assert_called_once_with(NORMALIZED_ADDRESS)
+    device.rewrite_url.assert_called_once_with(NORMALIZED_ADDRESS)
     assert device.xaddrs[consumer_key] == "http://wan.example.com:9000/consumer"
 
 
