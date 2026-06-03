@@ -66,8 +66,8 @@ class BaseManager:
         """Return True if the manager is closed."""
         return not self._subscription or self._subscription.transport.session.closed
 
-    async def start(self) -> None:
-        """Setup the manager."""
+    async def start(self) -> ONVIFService | None:
+        """Setup the manager and return the subscription service."""
         renewal_call_at = await self._start()
         self._schedule_subscription_renew(renewal_call_at)
         return self._subscription
@@ -103,7 +103,7 @@ class BaseManager:
     async def _start(self) -> float:
         """Setup the processor. Returns the next renewal call at time."""
 
-    async def set_synchronization_point(self) -> float:
+    async def set_synchronization_point(self) -> None:
         """Set the synchronization point."""
         try:
             await self._service.SetSynchronizationPoint()
@@ -116,7 +116,7 @@ class BaseManager:
             self._cancel_subscription_renew.cancel()
             self._cancel_subscription_renew = None
 
-    def _calculate_next_renewal_call_at(self, result: Any | None) -> float:
+    def _calculate_next_renewal_call_at(self, result: Any) -> float:
         """Calculate the next renewal call_at."""
         current_time: dt.datetime | None = result.CurrentTime
         termination_time: dt.datetime | None = result.TerminationTime
