@@ -35,11 +35,7 @@ class WsAddressingIfMissingPlugin(Plugin):
         ]
         header.extend(headers)
 
-        # the top_nsmap kwarg was added in lxml 3.5.0
-        if etree.LXML_VERSION[:2] >= (3, 5):
-            etree.cleanup_namespaces(
-                header, keep_ns_prefixes=header.nsmap, top_nsmap=self.nsmap
-            )
-        else:
-            etree.cleanup_namespaces(header)
+        etree.cleanup_namespaces(
+            header, keep_ns_prefixes=header.nsmap, top_nsmap=self.nsmap
+        )
         return envelope, http_headers
