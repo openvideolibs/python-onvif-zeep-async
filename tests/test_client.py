@@ -27,6 +27,7 @@ from onvif.client import (
     ZeepAsyncClient,
     _get_shared_sqlite_cache,
     _list_wsdl_dir,
+    _resolve_active_prefix,
 )
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
@@ -289,6 +290,45 @@ def test_authless_dispatch_existing_pascalcase_method_still_works() -> None:
 
     assert result == "ok"
     ws_client_authless.GetSystemDateAndTime.assert_called_once_with()
+
+
+# --------------------------------------------------------------------------
+# _resolve_active_prefix
+# --------------------------------------------------------------------------
+
+
+def test_resolve_active_prefix_returns_bound_prefix() -> None:
+    """The prefix bound to the requested namespace is returned."""
+    namespaces = {
+        "ns0": "http://www.onvif.org/ver10/device/wsdl",
+        "ns1": "http://www.onvif.org/ver10/schema",
+        "ns2": "http://www.w3.org/2005/08/addressing",
+    }
+    assert (
+        _resolve_active_prefix(namespaces, "http://www.onvif.org/ver10/schema") == "ns1"
+    )
+
+
+def test_resolve_active_prefix_falls_back_when_namespace_missing() -> None:
+    """An unknown namespace returns the "ns0" fallback rather than raising.
+
+    Regression: the previous ``list(keys)[list(values).index(...)]`` form
+    raised ``ValueError`` when the namespace was not present, defeating the
+    documented "or ns0" fallback for that path.
+    """
+    namespaces = {"ns0": "http://example.com/ns0"}
+    assert _resolve_active_prefix(namespaces, "http://example.com/not-here") == "ns0"
+
+
+def test_resolve_active_prefix_falls_back_when_prefix_is_empty_string() -> None:
+    """A namespace bound to an empty prefix collapses to the "ns0" fallback."""
+    namespaces = {"": "http://example.com/default", "ns1": "http://example.com/other"}
+    assert _resolve_active_prefix(namespaces, "http://example.com/default") == "ns0"
+
+
+def test_resolve_active_prefix_empty_mapping_returns_fallback() -> None:
+    """An empty namespace mapping returns the "ns0" fallback."""
+    assert _resolve_active_prefix({}, "http://example.com/anything") == "ns0"
 
 
 # --------------------------------------------------------------------------

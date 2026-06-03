@@ -123,6 +123,23 @@ _P = ParamSpec("_P")
 _R = TypeVar("_R")
 
 
+def _resolve_active_prefix(namespaces: dict[str, str], namespace: str) -> str:
+    """Return the prefix bound to *namespace* in *namespaces*.
+
+    Falls back to ``"ns0"`` when the namespace is not present or is bound to an
+    empty prefix. The single-pass ``next()`` form replaces an older
+    ``list(keys)[list(values).index(...)]`` lookup that built two parallel lists
+    and raised ``ValueError`` on a miss instead of using the documented fallback.
+    """
+    return (
+        next(
+            (prefix for prefix, uri in namespaces.items() if uri == namespace),
+            "",
+        )
+        or "ns0"
+    )
+
+
 def safe_func(func: Callable[_P, _R]) -> Callable[_P, _R]:
     """Ensure methods to raise an ONVIFError Exception when some thing was wrong.
 
@@ -449,12 +466,8 @@ class ONVIFService:
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
         namespace = binding_name[binding_name.find("{") + 1 : binding_name.find("}")]
-        available_ns = self.zeep_client.namespaces
-        active_ns = (
-            list(available_ns.keys())[list(available_ns.values()).index(namespace)]
-            or "ns0"
-        )
-        self.create_type = lambda x: self.zeep_client.get_element(active_ns + ":" + x)()
+        active_ns = _resolve_active_prefix(self.zeep_client.namespaces, namespace)
+        self.create_type = lambda x: self.zeep_client.get_element(f"{active_ns}:{x}")()
 
     async def close(self):
         """Close the transport."""
