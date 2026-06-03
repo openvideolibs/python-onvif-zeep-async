@@ -89,13 +89,48 @@ def test_skips_wsa_headers_when_wsa_action_missing() -> None:
     assert _wsa_children(result_env) == []
 
 
-def test_preserves_existing_wsa_headers() -> None:
-    """If an upstream caller already added WSA headers, the plugin must not duplicate them."""
+def test_adds_wsa_headers_for_wsn_soapaction_only_operation() -> None:
+    """WS-BaseNotification ops (Subscribe/Renew/Unsubscribe/...) still emit WSA.
+
+    These operations declare no abstract ``wsaw:Action`` -- only a
+    ``soap:operation soapAction`` in the OASIS ``wsn`` namespace -- yet they
+    require WSA headers. The soapAction fallback must keep working for them
+    (issue #155 must not regress the subscription-manager flows).
+    """
+    plugin = WsAddressingIfMissingPlugin()
+    envelope = _make_envelope()
+    operation = _make_operation(
+        wsa_action=None,
+        soapaction="http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest",
+    )
+
+    result_env, _ = plugin.egress(
+        envelope,
+        http_headers={},
+        operation=operation,
+        binding_options={"address": "http://192.0.2.10/onvif/Subscription"},
+    )
+
+    assert _wsa_children(result_env) == ["Action", "MessageID", "To"]
+    action = result_env.find(f"{{{_SOAP_NS}}}Header/{{{ns.WSA}}}Action")
+    assert (
+        action.text
+        == "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest"
+    )
+
+
+def test_preserves_existing_wsa_headers_with_arbitrary_prefix() -> None:
+    """Pre-existing WSA headers are detected by namespace, not by the ``wsa`` prefix.
+
+    XML namespace prefixes are arbitrary; an upstream caller may have added WSA
+    elements under a different prefix (e.g. ``<a:Action xmlns:a="...wsa...">``).
+    The plugin must still recognise them and not emit duplicates.
+    """
     plugin = WsAddressingIfMissingPlugin()
     envelope = _make_envelope()
     header = etree.SubElement(envelope, etree.QName(_SOAP_NS, "Header"))
     pre_existing = etree.SubElement(
-        header, etree.QName(ns.WSA, "Action"), nsmap={"wsa": ns.WSA}
+        header, etree.QName(ns.WSA, "Action"), nsmap={"a": ns.WSA}
     )
     pre_existing.text = "preset"
     operation = _make_operation(wsa_action="http://example.org/Action")
