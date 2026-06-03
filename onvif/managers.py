@@ -189,9 +189,19 @@ class BaseManager:
             return
         renewal_call_at = None
         try:
-            renewal_call_at = (
-                await self._renew_subscription() or await self._restart_subscription()
-            )
+            renewal_call_at = await self._renew_subscription()
+            if renewal_call_at is None:
+                try:
+                    renewal_call_at = await self._restart_subscription()
+                except RENEW_ERRORS as err:
+                    # _restart_subscription -> _start(), whose Subscribe/CreatePullPoint
+                    # round trip can raise. Without this guard the exception escapes
+                    # the fire-and-forget task as "Task exception was never retrieved".
+                    logger.debug(
+                        "%s: Failed to restart notify subscription %s",
+                        self._device.host,
+                        stringify_onvif_error(err),
+                    )
         finally:
             self._schedule_subscription_renew(
                 renewal_call_at
