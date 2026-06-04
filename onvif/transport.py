@@ -12,7 +12,7 @@ from .util import path_isfile
 class AsyncSafeTransport(Transport):
     """A transport that blocks all remote I/O for zeep."""
 
-    def load(self, url: str) -> None:
+    def load(self, url: str) -> bytes:
         """Load the given XML document."""
         if not path_isfile(url):
             msg = f"Loading {url} is not supported in async mode"
