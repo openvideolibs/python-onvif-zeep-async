@@ -41,6 +41,25 @@ def test_normalize_url():
     assert normalize_url(b"http://[dead:beef::1]:80") is None
 
 
+def test_normalize_url_preserves_port_with_userinfo():
+    """A valid URL carrying ``user:pass@`` must keep its single port.
+
+    The userinfo colon must not be counted as a duplicated-port colon.
+    Snapshot URIs and subscription addresses can embed credentials, so
+    stripping the port here would silently redirect requests to the wrong
+    port (e.g. 8080 -> default 80).
+    """
+    assert (
+        normalize_url("http://user:pass@host:8080/snapshot")
+        == "http://user:pass@host:8080/snapshot"
+    )
+    # Duplicated port is still collapsed even with userinfo present.
+    assert (
+        normalize_url("http://user:pass@host:8080:8080/snapshot")
+        == "http://user:pass@host:8080/snapshot"
+    )
+
+
 @pytest.mark.asyncio
 async def test_normalize_url_with_missing_url():
     device = ONVIFCamera("127.0.0.1", 80, "user", "pass", wsdl_dir=_WSDL_PATH)
