@@ -98,6 +98,12 @@ class ForgivingTime(Time):
             fixed_time, offset = _try_fix_time_overflow(value)
         except ValueError:
             return isodate.parse_time(value)
-        if fixed_dt := _try_parse_datetime(f"2024-01-15T{fixed_time}Z"):
-            return (fixed_dt + timedelta(**offset)).time()
+        # ``fixed_time`` keeps the original trailer (a ``Z``/``+hh:mm`` offset or
+        # nothing), so it is appended verbatim -- adding another ``Z`` here would
+        # produce ``...:16ZZ`` and the parse would fail for every timezone-bearing
+        # overflow value (e.g. ``00:61:16Z``). ``timetz()`` preserves the parsed
+        # offset, matching the tz-aware result ``isodate.parse_time`` returns on
+        # the non-overflow path.
+        if fixed_dt := _try_parse_datetime(f"2024-01-15T{fixed_time}"):
+            return (fixed_dt + timedelta(**offset)).timetz()
         return isodate.parse_time(value)

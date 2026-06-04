@@ -119,6 +119,35 @@ def test_fix_time_overflow() -> None:
     assert ForgivingTime().pythonvalue("23:61:00") == datetime.time(0, 1, 0)
 
 
+def test_fix_time_overflow_with_timezone() -> None:
+    """Overflow correction must work for timezone-bearing values too.
+
+    Regression test: the corrected string was previously suffixed with an extra
+    ``Z`` (``00:59:16ZZ``), so every timezone-bearing overflow value failed to
+    parse and re-raised ``ValueError``. The parsed offset is preserved, matching
+    the tz-aware result the non-overflow ``isodate`` path returns.
+    """
+    assert ForgivingTime().pythonvalue("00:61:16Z") == datetime.time(
+        1, 1, 16, tzinfo=datetime.timezone.utc
+    )
+    assert ForgivingTime().pythonvalue("25:00:00Z") == datetime.time(
+        1, 0, 0, tzinfo=datetime.timezone.utc
+    )
+    assert ForgivingTime().pythonvalue("00:00:75Z") == datetime.time(
+        0, 1, 15, tzinfo=datetime.timezone.utc
+    )
+    assert ForgivingTime().pythonvalue("00:61:16+02:00") == datetime.time(
+        1, 1, 16, tzinfo=datetime.timezone(datetime.timedelta(hours=2))
+    )
+
+
+def test_time_no_overflow_preserves_timezone() -> None:
+    """Non-overflow tz-bearing times keep their offset (sanity anchor)."""
+    assert ForgivingTime().pythonvalue("23:59:16Z") == datetime.time(
+        23, 59, 16, tzinfo=datetime.timezone.utc
+    )
+
+
 def test_unfixable_time_overflow() -> None:
     with pytest.raises(ValueError, match="Unrecognised ISO 8601 time format"):
         assert ForgivingTime().pythonvalue("999:00:00")
