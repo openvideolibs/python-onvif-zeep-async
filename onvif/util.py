@@ -43,6 +43,19 @@ def normalize_url(url: bytes | str | None) -> str | None:
     return url
 
 
+def bracket_host(host: str) -> str:
+    """Wrap a bare IPv6 literal in brackets for safe use in a URL netloc.
+
+    Hostnames, IPv4 addresses, and already-bracketed IPv6 literals are returned
+    unchanged. An unbracketed IPv6 literal (it contains a ``:``) must be
+    bracketed before a ``:port`` suffix is appended, otherwise ``urlparse``
+    cannot tell the address colons from the port separator and rejects the URL.
+    """
+    if host.startswith("[") or ":" not in host:
+        return host
+    return f"[{host}]"
+
+
 def replace_host_port(url: str | None, host: str, port: int) -> str | None:
     """Rewrite the netloc of ``url`` to ``host:port``.
 
@@ -63,13 +76,7 @@ def replace_host_port(url: str | None, host: str, port: int) -> str | None:
     parsed = urlparse(url)
     if isinstance(parsed, ParseResultBytes):
         return url
-    if host.startswith("["):
-        bracketed = host
-    elif ":" in host:
-        bracketed = f"[{host}]"
-    else:
-        bracketed = host
-    return urlunparse(parsed._replace(netloc=f"{bracketed}:{port}"))
+    return urlunparse(parsed._replace(netloc=f"{bracket_host(host)}:{port}"))
 
 
 def extract_subcodes_as_strings(subcodes: Any) -> list[str]:

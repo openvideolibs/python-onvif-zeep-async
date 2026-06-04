@@ -12,6 +12,7 @@ from onvif.client import ONVIFCamera
 from onvif.settings import DEFAULT_SETTINGS
 from onvif.transport import ASYNC_TRANSPORT, AsyncSafeTransport
 from onvif.util import (
+    bracket_host,
     extract_subcodes_as_strings,
     is_auth_error,
     normalize_url,
@@ -88,6 +89,14 @@ def test_replace_host_port_ipv6_host_gets_bracketed():
         replace_host_port("http://192.168.1.100/x", "[dead:beef::1]", 80)
         == "http://[dead:beef::1]:80/x"
     )
+
+
+def test_bracket_host():
+    # Bare IPv6 literals get bracketed; everything else passes through.
+    assert bracket_host("dead:beef::1") == "[dead:beef::1]"
+    assert bracket_host("[dead:beef::1]") == "[dead:beef::1]"
+    assert bracket_host("192.168.1.100") == "192.168.1.100"
+    assert bracket_host("camera.local") == "camera.local"
 
 
 def test_replace_host_port_no_op_on_empty_or_none():
