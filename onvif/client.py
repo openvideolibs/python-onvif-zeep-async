@@ -785,7 +785,7 @@ class ONVIFCamera:
             logger.debug("%s: Device returned no current time", self.host)
             return False
         if not termination_time:
-            logger.debug("%s: Device returned no current time", self.host)
+            logger.debug("%s: Device returned no termination time", self.host)
             return False
         if current_time.tzinfo is None:
             logger.debug(
