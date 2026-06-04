@@ -97,6 +97,9 @@ def test_bracket_host():
     assert bracket_host("[dead:beef::1]") == "[dead:beef::1]"
     assert bracket_host("192.168.1.100") == "192.168.1.100"
     assert bracket_host("camera.local") == "camera.local"
+    # Single-colon (non-IPv6) values are left untouched, not bracketed.
+    assert bracket_host("camera.local:8080") == "camera.local:8080"
+    assert bracket_host("https://1.2.3.4") == "https://1.2.3.4"
 
 
 def test_replace_host_port_no_op_on_empty_or_none():

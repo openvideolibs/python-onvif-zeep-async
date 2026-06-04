@@ -47,11 +47,13 @@ def bracket_host(host: str) -> str:
     """Wrap a bare IPv6 literal in brackets for safe use in a URL netloc.
 
     Hostnames, IPv4 addresses, and already-bracketed IPv6 literals are returned
-    unchanged. An unbracketed IPv6 literal (it contains a ``:``) must be
+    unchanged. A bare IPv6 literal (it contains two or more ``:``) must be
     bracketed before a ``:port`` suffix is appended, otherwise ``urlparse``
     cannot tell the address colons from the port separator and rejects the URL.
+    A single colon signals a non-IPv6 value such as ``host:port`` or a
+    scheme-prefixed host, which is left untouched.
     """
-    if host.startswith("[") or ":" not in host:
+    if host.startswith("[") or host.count(":") < 2:
         return host
     return f"[{host}]"
 
