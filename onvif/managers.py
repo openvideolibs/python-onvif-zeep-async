@@ -85,7 +85,20 @@ class BaseManager:
         logger.debug("%s: Stop the notification manager", self._device.host)
         self._cancel_renewals()
         assert self._subscription, "Call start first"  # noqa: S101
-        await self._subscription.Unsubscribe()
+        try:
+            await self._subscription.Unsubscribe()
+        except SUBSCRIPTION_ERRORS as err:
+            # Teardown is best-effort: the camera being unreachable is the most
+            # common reason a consumer is stopping the manager, and the remote
+            # Unsubscribe is only a courtesy (the subscription expires on the
+            # camera once its termination time passes). Letting this raise would
+            # abort the caller's shutdown sequence -- shutdown() is documented
+            # irreversible and has already cancelled the renewal task by now.
+            logger.debug(
+                "%s: Failed to unsubscribe notify subscription %s",
+                self._device.host,
+                stringify_onvif_error(err),
+            )
 
     async def shutdown(self) -> None:
         """
