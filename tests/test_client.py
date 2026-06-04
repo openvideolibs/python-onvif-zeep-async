@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -517,6 +518,34 @@ def test_get_definition_devicemgmt_fixed_xaddr() -> None:
     assert xaddr == "http://1.2.3.4:80/onvif/device_service"
     assert wsdlpath.endswith("devicemgmt.wsdl")
     assert "DeviceBinding" in binding_name
+
+
+def test_get_definition_devicemgmt_ipv6_xaddr() -> None:
+    """A bare IPv6 host is bracketed so the device_service xaddr parses."""
+    cam = _make_bare_camera()
+    cam.host = "fe80::1"
+    xaddr, _wsdlpath, _binding_name = cam.get_definition("devicemgmt")
+    assert xaddr == "http://[fe80::1]:80/onvif/device_service"
+    parsed = urlparse(xaddr)
+    assert parsed.hostname == "fe80::1"
+    assert parsed.port == 80
+
+
+def test_get_definition_devicemgmt_bracketed_ipv6_xaddr() -> None:
+    """An already-bracketed IPv6 host is not double-bracketed."""
+    cam = _make_bare_camera()
+    cam.host = "[fe80::1]"
+    xaddr, _wsdlpath, _binding_name = cam.get_definition("devicemgmt")
+    assert xaddr == "http://[fe80::1]:80/onvif/device_service"
+    assert urlparse(xaddr).hostname == "fe80::1"
+
+
+def test_get_definition_devicemgmt_scheme_host_xaddr() -> None:
+    """A host that already carries a scheme is used verbatim."""
+    cam = _make_bare_camera()
+    cam.host = "https://1.2.3.4"
+    xaddr, _wsdlpath, _binding_name = cam.get_definition("devicemgmt")
+    assert xaddr == "https://1.2.3.4:80/onvif/device_service"
 
 
 def test_get_definition_with_port_type() -> None:

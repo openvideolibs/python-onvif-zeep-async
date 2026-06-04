@@ -27,6 +27,7 @@ from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
 from .types import FastDateTime, ForgivingTime
 from .util import (
+    bracket_host,
     create_no_verify_ssl_context,
     normalize_url,
     obscure_user_pass_url,
@@ -972,12 +973,13 @@ class ONVIFCamera:
 
         # XAddr for devicemgmt is fixed:
         if name == "devicemgmt":
-            xaddr = "{}:{}/onvif/device_service".format(
-                self.host
-                if (self.host.startswith("http://") or self.host.startswith("https://"))
-                else f"http://{self.host}",
-                self.port,
-            )
+            if self.host.startswith(("http://", "https://")):
+                base = self.host
+            else:
+                # Bracket bare IPv6 literals so the ":port" suffix below does
+                # not collide with the address colons (urlparse would reject it).
+                base = f"http://{bracket_host(self.host)}"
+            xaddr = f"{base}:{self.port}/onvif/device_service"
             return xaddr, wsdlpath, binding_name
 
         # Get other XAddr
