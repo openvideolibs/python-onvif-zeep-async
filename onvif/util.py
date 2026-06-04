@@ -36,10 +36,15 @@ def normalize_url(url: bytes | str | None) -> str | None:
     # If the URL is not a string, return None
     if isinstance(parsed, ParseResultBytes):
         return None
-    if "[" not in parsed.netloc and parsed.netloc.count(":") > 1:
-        net_location = parsed.netloc.split(":", 3)
-        net_location.pop()
-        return urlunparse(parsed._replace(netloc=":".join(net_location)))
+    # Split off any ``user:pass@`` userinfo so its colon is not mistaken for a
+    # duplicated-port colon -- otherwise a valid ``user:pass@host:port`` URL
+    # would lose its port (e.g. snapshot URIs that embed credentials).
+    userinfo, sep, hostport = parsed.netloc.rpartition("@")
+    if "[" not in hostport and hostport.count(":") > 1:
+        host_parts = hostport.split(":")
+        host_parts.pop()
+        new_hostport = ":".join(host_parts)
+        return urlunparse(parsed._replace(netloc=f"{userinfo}{sep}{new_hostport}"))
     return url
 
 
