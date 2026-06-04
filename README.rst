@@ -55,6 +55,38 @@ you need to point it at a custom WSDL directory; omit it to use the bundled
 files. After ``update_xaddrs()`` the ``devicemgmt`` service is available on
 the instance, exposing every operation defined in the device management WSDL.
 
+Constructor options
+~~~~~~~~~~~~~~~~~~~~
+
+Beyond the connection details, ``ONVIFCamera`` accepts several keyword
+arguments that change how it authenticates and reaches the device::
+
+    mycam = ONVIFCamera(
+        '192.168.0.2', 80, 'user', 'passwd',
+        wsdl_dir='/path/to/wsdl',   # custom WSDL directory (default: bundled files)
+        encrypt=True,               # WS-Security password digest (see below)
+        no_cache=False,             # disable the on-disk WSDL cache
+        adjust_time=False,          # tolerate cameras with a wrong clock
+        nat_override=False,         # rewrite device-advertised URLs (see below)
+    )
+
+* ``encrypt`` (default ``True``) — send the WS-Security ``UsernameToken`` as a
+  password *digest*. Set it to ``False`` to send the password in plain text for
+  cameras that do not support digest authentication.
+* ``no_cache`` (default ``False``) — skip the shared on-disk SQLite cache used
+  to parse the WSDL files. Useful in read-only or ephemeral environments where
+  the cache file cannot be written.
+* ``adjust_time`` (default ``False``) — compensate for cameras whose clock is
+  not synchronized by folding the measured time difference into the security
+  token, allowing authentication to succeed. NTP on both ends is the
+  recommended solution; only use this in trusted environments. It cannot be
+  used on AXIS cameras, which authenticate every request.
+* ``nat_override`` (default ``False``) — rewrite the host:port of URLs the
+  device advertises (XAddrs, subscription addresses, snapshot URIs) to the
+  host:port you passed to the constructor. Required for cameras behind NAT,
+  which advertise their unreachable LAN address. Assumes a single port-forward
+  to the device; RTSP stream URIs from ``GetStreamUri`` are not rewritten.
+
 Get information from your camera
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ::
