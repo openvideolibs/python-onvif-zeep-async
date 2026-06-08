@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
@@ -17,22 +16,15 @@ from onvif import ONVIFCamera
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Coroutine
+    from collections.abc import AsyncGenerator
 
-
-def _drive_off_loop(coro: Coroutine[object, object, None]) -> None:
-    """Run an aiointercept lifecycle coroutine on a private event loop.
-
-    aiointercept.start()/stop() spin a background server thread up and down,
-    blocking synchronously on threading.Event.wait / Thread.join while they do.
-    On the test's event-loop thread blockbuster flags those as blocking calls,
-    so drive them on a throwaway loop in a worker thread instead.
-    """
-    asyncio.run(coro)
+    from blockbuster import BlockBuster
 
 
 @pytest_asyncio.fixture
-async def mock_aioresponse() -> AsyncGenerator[aiointercept]:
+async def mock_aioresponse(
+    blockbuster: BlockBuster | None,
+) -> AsyncGenerator[aiointercept]:
     """Return aiointercept fixture intercepting external camera URLs.
 
     aiointercept routes requests through a real local test server and intercepts
@@ -40,15 +32,23 @@ async def mock_aioresponse() -> AsyncGenerator[aiointercept]:
     IP-literal hosts, so the mocked snapshot URIs use a hostname rather than an
     IP address.
 
-    The server lifecycle is started/stopped off the event-loop thread (via an
-    executor) so its synchronous thread-handshake does not trip blockbuster.
+    start()/stop() spin a background server thread up and down, blocking briefly
+    on the synchronous handshake (threading.Event.wait / Thread.join / the
+    module-level patch lock). Those are test-harness internals, not onvif code
+    under test, so allow blocking inside aiointercept's lifecycle frames rather
+    than letting blockbuster flag them.
     """
+    if blockbuster is not None:
+        blockbuster.functions["threading.Lock.acquire"].can_block_in(
+            "aiointercept/core.py",
+            {"start", "stop", "_start_server_thread", "_stop_server_thread"},
+        )
     interceptor = aiointercept(mock_external_urls=True)
-    await asyncio.to_thread(_drive_off_loop, interceptor.start())
+    await interceptor.start()
     try:
         yield interceptor
     finally:
-        await asyncio.to_thread(_drive_off_loop, interceptor.stop())
+        await interceptor.stop()
 
 
 @asynccontextmanager
