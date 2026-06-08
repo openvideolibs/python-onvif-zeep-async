@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
@@ -16,7 +17,18 @@ from onvif import ONVIFCamera
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Coroutine
+
+
+def _drive_off_loop(coro: Coroutine[object, object, None]) -> None:
+    """Run an aiointercept lifecycle coroutine on a private event loop.
+
+    aiointercept.start()/stop() spin a background server thread up and down,
+    blocking synchronously on threading.Event.wait / Thread.join while they do.
+    On the test's event-loop thread blockbuster flags those as blocking calls,
+    so drive them on a throwaway loop in a worker thread instead.
+    """
+    asyncio.run(coro)
 
 
 @pytest_asyncio.fixture
@@ -27,9 +39,16 @@ async def mock_aioresponse() -> AsyncGenerator[aiointercept]:
     them by patching aiohttp's DNS resolver. aiohttp bypasses the resolver for
     IP-literal hosts, so the mocked snapshot URIs use a hostname rather than an
     IP address.
+
+    The server lifecycle is started/stopped off the event-loop thread (via an
+    executor) so its synchronous thread-handshake does not trip blockbuster.
     """
-    async with aiointercept(mock_external_urls=True) as m:
-        yield m
+    interceptor = aiointercept(mock_external_urls=True)
+    await asyncio.to_thread(_drive_off_loop, interceptor.start())
+    try:
+        yield interceptor
+    finally:
+        await asyncio.to_thread(_drive_off_loop, interceptor.stop())
 
 
 @asynccontextmanager
