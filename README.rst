@@ -5,17 +5,28 @@ python-onvif-zeep-async
     :target: https://codecov.io/gh/openvideolibs/python-onvif-zeep-async
     :alt: codecov
 
-ONVIF Client Implementation in Python 3
+Asynchronous ONVIF client implementation for Python 3.10+. Network I/O is
+fully ``asyncio``-based: SOAP requests go over an `aiohttp
+<https://docs.aiohttp.org/>`_ transport, so every camera call is awaitable.
 
 Documentation
 -------------
 * `Source code and issue tracker <https://github.com/openvideolibs/python-onvif-zeep-async>`_
 * `PyPI package <https://pypi.org/project/onvif-zeep-async/>`_
 
+Requirements
+------------
+Python 3.10 or newer.
+
 Dependencies
 ------------
-`zeep[async] <http://docs.python-zeep.org>`_ >= 4.1.0, < 5.0.0
-`httpx <https://www.python-httpx.org/>`_ >= 0.19.0, < 1.0.0
+These are installed automatically with the package:
+
+* `zeep[async] <http://docs.python-zeep.org>`_ >= 4.2.1, < 5.0.0 — SOAP/WSDL engine
+* `aiohttp <https://docs.aiohttp.org/>`_ >= 3.12.9 — async HTTP transport for ONVIF/SOAP calls
+* `httpx <https://www.python-httpx.org/>`_ >= 0.19.0, < 1.0.0
+* `ciso8601 <https://github.com/closeio/ciso8601>`_ >= 2.1.3 — fast ISO 8601 timestamp parsing
+* `yarl <https://github.com/aio-libs/yarl>`_ >= 1.10.0 — URL handling
 
 Install python-onvif-zeep-async
 -------------------------------
@@ -44,9 +55,13 @@ you do not need to download or pass them yourself::
 
     async def main():
         mycam = ONVIFCamera('192.168.0.2', 80, 'user', 'passwd')
-        await mycam.update_xaddrs()
-        resp = await mycam.devicemgmt.GetHostname()
-        print(f"My camera's hostname: {resp.Name}")
+        try:
+            await mycam.update_xaddrs()
+            resp = await mycam.devicemgmt.GetHostname()
+            print(f"My camera's hostname: {resp.Name}")
+        finally:
+            # Close the underlying aiohttp session(s) when you are done.
+            await mycam.close()
 
     asyncio.run(main())
 
