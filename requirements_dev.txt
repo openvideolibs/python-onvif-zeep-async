@@ -6,7 +6,7 @@ pytest==9.1.1
 pytest-cov==7.1.0
 pytest-asyncio==1.4.0
 covdefaults==2.3.0
-aiointercept==0.1.7
+aiointercept==0.1.8
 blockbuster==1.5.26
 
 # pre-commit
