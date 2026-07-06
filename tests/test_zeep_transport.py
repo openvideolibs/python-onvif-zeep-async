@@ -988,10 +988,11 @@ async def test_http_error_responses_no_exception():
 
 @pytest.mark.asyncio
 async def test_post_runtime_error_is_rewrapped():
-    """RuntimeError from a closed session is rewrapped with the target URL."""
+    """RuntimeError with the session still open is rewrapped with the URL."""
     mock_session = Mock(spec=aiohttp.ClientSession)
     mock_session.timeout = Mock(total=300, sock_read=None)
-    mock_session.post = AsyncMock(side_effect=RuntimeError("Session is closed"))
+    mock_session.closed = False
+    mock_session.post = AsyncMock(side_effect=RuntimeError("Unexpected"))
 
     transport = AIOHTTPTransport(session=mock_session)
 
@@ -1002,16 +1003,57 @@ async def test_post_runtime_error_is_rewrapped():
 
 
 @pytest.mark.asyncio
-async def test_get_runtime_error_is_rewrapped():
-    """RuntimeError from a closed session in GET is rewrapped with the URL."""
+async def test_post_closed_session_raises_client_error():
+    """RuntimeError from a closed session surfaces as ClientConnectionError.
+
+    The subscription managers run renewals as fire-and-forget tasks and only
+    catch aiohttp.ClientError (and friends); a bare RuntimeError would escape
+    as "Task exception was never retrieved" and the renewal loop would retry
+    forever after the consumer closed the session.
+    """
     mock_session = Mock(spec=aiohttp.ClientSession)
     mock_session.timeout = Mock(total=300, sock_read=None)
-    mock_session.get = AsyncMock(side_effect=RuntimeError("Session is closed"))
+    mock_session.closed = True
+    mock_session.post = AsyncMock(side_effect=RuntimeError("Session is closed"))
+
+    transport = AIOHTTPTransport(session=mock_session)
+
+    with pytest.raises(
+        aiohttp.ClientConnectionError,
+        match=r"Failed to post to http://example\.com/svc",
+    ):
+        await transport.post("http://example.com/svc", "<r/>", {})
+
+
+@pytest.mark.asyncio
+async def test_get_runtime_error_is_rewrapped():
+    """RuntimeError in GET with the session still open is rewrapped."""
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.timeout = Mock(total=300, sock_read=None)
+    mock_session.closed = False
+    mock_session.get = AsyncMock(side_effect=RuntimeError("Unexpected"))
 
     transport = AIOHTTPTransport(session=mock_session)
 
     with pytest.raises(
         RuntimeError, match=r"Failed to get from http://example\.com/wsdl"
+    ):
+        await transport.get("http://example.com/wsdl")
+
+
+@pytest.mark.asyncio
+async def test_get_closed_session_raises_client_error():
+    """RuntimeError from a closed session in GET raises ClientConnectionError."""
+    mock_session = Mock(spec=aiohttp.ClientSession)
+    mock_session.timeout = Mock(total=300, sock_read=None)
+    mock_session.closed = True
+    mock_session.get = AsyncMock(side_effect=RuntimeError("Session is closed"))
+
+    transport = AIOHTTPTransport(session=mock_session)
+
+    with pytest.raises(
+        aiohttp.ClientConnectionError,
+        match=r"Failed to get from http://example\.com/wsdl",
     ):
         await transport.get("http://example.com/wsdl")
 
