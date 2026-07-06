@@ -64,7 +64,15 @@ class BaseManager:
     @property
     def closed(self) -> bool:
         """Return True if the manager is closed."""
-        return not self._subscription or self._subscription.transport.session.closed
+        return not self._subscription or self._session_closed
+
+    @property
+    def _session_closed(self) -> bool:
+        """Return True if the consumer closed the aiohttp session."""
+        return (
+            self._subscription is not None
+            and self._subscription.transport.session.closed
+        )
 
     async def start(self) -> ONVIFService | None:
         """Setup the manager and return the subscription service."""
@@ -198,7 +206,11 @@ class BaseManager:
 
     async def _renew_or_restart_subscription(self) -> None:
         """Renew or start notify subscription."""
-        if self._shutdown:
+        if self._shutdown or self._session_closed:
+            # The manager does not own the aiohttp session, so once the
+            # consumer closes it renewing or restarting can never succeed
+            # again; end the renewal loop instead of retrying a doomed
+            # request forever.
             return
         renewal_call_at = None
         try:
@@ -221,7 +233,10 @@ class BaseManager:
             # resulting CancelledError still runs this finally, so without the
             # guard the timer is rescheduled *after* _cancel_renewals() ran,
             # leaving a live TimerHandle behind an "irreversible" shutdown.
-            if not self._shutdown:
+            # The _session_closed check covers the session being closed while
+            # a renew or restart was in flight -- same reasoning as the entry
+            # guard.
+            if not self._shutdown and not self._session_closed:
                 self._schedule_subscription_renew(
                     renewal_call_at
                     or self._loop.time()

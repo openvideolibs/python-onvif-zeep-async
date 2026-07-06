@@ -493,6 +493,55 @@ async def test_renew_or_restart_returns_early_when_shutdown() -> None:
 
 
 @pytest.mark.asyncio
+async def test_renew_or_restart_returns_early_when_session_closed() -> None:
+    """A closed session must end the renewal loop, not restart it.
+
+    The consumer owns the aiohttp session; once it is closed (e.g. Home
+    Assistant unloading the config entry) no renew or restart can ever
+    succeed, so the task must bail out without re-arming the timer.
+    """
+    mgr = await _make_base_manager()
+    mgr._subscription = _make_subscription(closed=True)
+    mgr._renew_subscription = AsyncMock()
+    mgr._restart_subscription = AsyncMock()
+    mgr._schedule_subscription_renew = Mock()
+
+    await mgr._renew_or_restart_subscription()
+
+    mgr._renew_subscription.assert_not_awaited()
+    mgr._restart_subscription.assert_not_awaited()
+    mgr._schedule_subscription_renew.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_renew_or_restart_stops_when_session_closes_mid_flight() -> None:
+    """A session closed while a renewal is in flight must not re-arm the timer.
+
+    Mirrors the consumer closing the session between the entry guard and the
+    renew/restart round trips: the restart fails with a ClientError and the
+    ``finally`` block must see the closed session and end the loop instead of
+    rescheduling the error retry.
+    """
+    mgr = await _make_base_manager()
+    subscription = _make_subscription(closed=False)
+    mgr._subscription = subscription
+    mgr._schedule_subscription_renew = Mock()
+
+    async def _renew_with_session_closing() -> float | None:
+        subscription.transport.session.closed = True
+        return None
+
+    mgr._renew_subscription = _renew_with_session_closing
+    mgr._restart_subscription = AsyncMock(
+        side_effect=aiohttp.ClientConnectionError("Session is closed")
+    )
+
+    await mgr._renew_or_restart_subscription()  # must not raise
+
+    mgr._schedule_subscription_renew.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_renew_or_restart_schedules_on_successful_renew() -> None:
     mgr = await _make_base_manager()
     mgr._renew_subscription = AsyncMock(return_value=123.0)

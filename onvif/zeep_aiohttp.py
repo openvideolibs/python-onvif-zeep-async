@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from aiohttp import ClientResponse, ClientSession, hdrs
+from aiohttp import ClientConnectionError, ClientResponse, ClientSession, hdrs
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 from zeep.transports import Transport
@@ -168,8 +168,13 @@ class AIOHTTPTransport(Transport):
                 content,
             )
         except RuntimeError as exc:
-            # Handle RuntimeError which may occur if the session is closed
             msg = f"Failed to post to {address}: {exc}"
+            if self.session.closed:
+                # The consumer owns the session and closed it (e.g. during
+                # teardown). Surface this as a ClientError so the subscription
+                # managers' error handling catches it instead of an unhandled
+                # RuntimeError escaping their background renewal task.
+                raise ClientConnectionError(msg) from exc
             raise RuntimeError(msg) from exc
         except TimeoutError as exc:
             msg = f"Request to {address} timed out"
@@ -260,8 +265,11 @@ class AIOHTTPTransport(Transport):
             # Convert directly to requests.Response
             return self._aiohttp_to_requests_response(response, content)
         except RuntimeError as exc:
-            # Handle RuntimeError which may occur if the session is closed
             msg = f"Failed to get from {address}: {exc}"
+            if self.session.closed:
+                # See _post_internal: a closed session must surface as a
+                # ClientError, not a RuntimeError.
+                raise ClientConnectionError(msg) from exc
             raise RuntimeError(msg) from exc
 
         except TimeoutError as exc:
