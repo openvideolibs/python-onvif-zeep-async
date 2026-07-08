@@ -705,7 +705,6 @@ async def test_create_pullpoint_service_uses_pullpoint_timeouts() -> None:
             "pullpoint",
             port_type="PullPointSubscription",
             read_timeout=onvif.client._PULLPOINT_TIMEOUT,
-            write_timeout=onvif.client._PULLPOINT_TIMEOUT,
         )
 
 
