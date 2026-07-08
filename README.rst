@@ -172,6 +172,57 @@ Or create an unofficial service::
     # Another way
     # await mycam.yourservice.SomeOperation()
 
+Capture a snapshot
+~~~~~~~~~~~~~~~~~~
+``ONVIFCamera`` can fetch a still image directly, resolving the snapshot URI
+from the media profile and handling authentication for you::
+
+    # profile_token comes from the media service, e.g.
+    #   profiles = await mycam.media.GetProfiles()
+    #   profile_token = profiles[0].token
+    image = await mycam.get_snapshot(profile_token)
+    if image is not None:
+        with open('snapshot.jpg', 'wb') as fh:
+            fh.write(image)
+
+``get_snapshot`` returns the JPEG bytes, or ``None`` if the device has no
+snapshot URI or the request fails. It uses HTTP digest authentication by
+default; pass ``basic_auth=True`` for cameras that only accept basic auth. The
+resolved URI is cached per profile, so repeated calls do not re-query the
+device. Use ``get_snapshot_uri(profile_token)`` if you only need the URI.
+
+Receive events
+~~~~~~~~~~~~~~
+For motion, tampering, and other event notifications, create a **pull-point
+manager**. It sets up the subscription, keeps it renewed, and gives you a
+service to pull messages from::
+
+    from datetime import timedelta
+
+    def on_subscription_lost() -> None:
+        print("Subscription lost -- re-create the manager")
+
+    manager = await mycam.create_pullpoint_manager(
+        timedelta(seconds=60),          # subscription lifetime / renewal interval
+        on_subscription_lost,
+    )
+    # Prime the subscription so the next pull returns current state.
+    await manager.set_synchronization_point()
+
+    pullpoint = manager.get_service()
+    messages = await pullpoint.PullMessages(
+        {'Timeout': timedelta(seconds=30), 'MessageLimit': 100}
+    )
+    for msg in messages.NotificationMessage:
+        print(msg.Topic._value_1, msg.Message)
+
+    # When you are done, stop renewals and tear down the subscription.
+    await manager.stop()
+
+If your application exposes an HTTP endpoint the camera can push to instead of
+polling, use ``create_notification_manager(address, interval, callback)`` and
+feed each incoming request body to ``manager.process(content)`` to parse it.
+
 References
 ----------
 
