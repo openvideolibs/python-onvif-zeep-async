@@ -856,33 +856,36 @@ class ONVIFCamera:
         for service in self.services.values():
             await service.close()
 
-    async def get_snapshot_uri(self, profile_token: str) -> str:
+    async def get_snapshot_uri(self, profile_token: str) -> str | None:
         """Get the snapshot uri for a given profile."""
         uri = self._snapshot_uris.get(profile_token, _SENTINEL)
-        if uri is _SENTINEL:
-            media_service = await self.create_media_service()
-            req = media_service.create_type("GetSnapshotUri")
-            req.ProfileToken = profile_token
+        if uri is not _SENTINEL:
+            return uri
+        media_service = await self.create_media_service()
+        req = media_service.create_type("GetSnapshotUri")
+        req.ProfileToken = profile_token
+        try:
+            result = await media_service.GetSnapshotUri(req)
+        except zeep.exceptions.Fault as error:
+            logger.warning(
+                "%s: Failed to get snapshot URI for profile %s: %s",
+                self.host,
+                profile_token,
+                error,
+            )
+            # Transient fault (e.g. device busy) — do not cache, so the next
+            # call retries instead of returning None forever until restart.
+            return None
+        try:
+            uri = self.rewrite_url(normalize_url(result.Uri))
+        except (AttributeError, KeyError):
+            # AttributeError is raised when result.Uri is missing
+            # https://github.com/home-assistant/core/issues/135494
+            logger.warning(
+                "%s: The device returned an invalid snapshot URI", self.host
+            )
             uri = None
-            try:
-                result = await media_service.GetSnapshotUri(req)
-            except zeep.exceptions.Fault as error:
-                logger.warning(
-                    "%s: Failed to get snapshot URI for profile %s: %s",
-                    self.host,
-                    profile_token,
-                    error,
-                )
-            else:
-                try:
-                    uri = self.rewrite_url(normalize_url(result.Uri))
-                except (AttributeError, KeyError):
-                    # AttributeError is raised when result.Uri is missing
-                    # https://github.com/home-assistant/core/issues/135494
-                    logger.warning(
-                        "%s: The device returned an invalid snapshot URI", self.host
-                    )
-            self._snapshot_uris[profile_token] = uri
+        self._snapshot_uris[profile_token] = uri
         return uri
 
     async def get_snapshot(
