@@ -20,7 +20,6 @@ from .types import TopicExpression
 from .util import normalize_url, stringify_onvif_error
 from .wrappers import retry_connection_error
 
-
 logger = logging.getLogger("onvif")
 
 
@@ -383,7 +382,8 @@ class PullPointManager(BaseManager):
             ... )
         """
         if topic_filter is not None and not topic_filter.strip():
-            raise ValueError("topic_filter must be a non-empty string or None")
+            msg = "topic_filter must be a non-empty string or None"
+            raise ValueError(msg)
         self._topic_filter: str | None = topic_filter
         self._topic_filter_dialect: str = topic_filter_dialect
         super().__init__(device, interval, subscription_lost_callback)
