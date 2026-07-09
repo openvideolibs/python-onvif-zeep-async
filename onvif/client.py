@@ -881,9 +881,7 @@ class ONVIFCamera:
         except (AttributeError, KeyError):
             # AttributeError is raised when result.Uri is missing
             # https://github.com/home-assistant/core/issues/135494
-            logger.warning(
-                "%s: The device returned an invalid snapshot URI", self.host
-            )
+            logger.warning("%s: The device returned an invalid snapshot URI", self.host)
             uri = None
         self._snapshot_uris[profile_token] = uri
         return uri
