@@ -610,7 +610,11 @@ async def test_create_onvif_service_closes_service_when_setup_fails() -> None:
             patch.object(
                 cam,
                 "get_definition",
-                return_value=("http://1.2.3.4/onvif/media", "media.wsdl", "{ns}Binding"),
+                return_value=(
+                    "http://1.2.3.4/onvif/media",
+                    "media.wsdl",
+                    "{ns}Binding",
+                ),
             ),
             patch("onvif.client.ONVIFService", return_value=service),
             pytest.raises(ONVIFError),
