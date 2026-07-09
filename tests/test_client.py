@@ -599,6 +599,29 @@ async def test_create_onvif_service_warms_wsdl_dir_cache(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+async def test_create_onvif_service_closes_service_when_setup_fails() -> None:
+    """A setup() failure must close the service so its aiohttp session is released."""
+    async with create_test_camera() as cam:
+        service = Mock(spec=ONVIFService)
+        service.setup = AsyncMock(side_effect=ONVIFError("device unreachable"))
+        service.close = AsyncMock()
+
+        with (
+            patch.object(
+                cam,
+                "get_definition",
+                return_value=("http://1.2.3.4/onvif/media", "media.wsdl", "{ns}Binding"),
+            ),
+            patch("onvif.client.ONVIFService", return_value=service),
+            pytest.raises(ONVIFError),
+        ):
+            await cam.create_onvif_service("media")
+
+        service.close.assert_awaited_once()
+        assert ("media", None) not in cam.services
+
+
+@pytest.mark.asyncio
 async def test_create_onvif_service_returns_cached_when_xaddr_unchanged() -> None:
     """An existing service with the same xaddr is reused, not recreated."""
     async with create_test_camera() as cam:
