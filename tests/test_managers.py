@@ -992,3 +992,55 @@ async def test_pullpoint_manager_rejects_blank_topic_filter(blank: str) -> None:
     """Blank topic filters are rejected up front, not silently sent."""
     with pytest.raises(ValueError, match="topic_filter must be a non-empty"):
         PullPointManager(_make_device(), INTERVAL, Mock(), topic_filter=blank)
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_start_sends_topic_filter() -> None:
+    """A configured topic filter reaches the CreatePullPointSubscription request.
+
+    Guards the ``_start()`` integration path: the stored filter must be turned
+    into a WS-Notification ``Filter`` element (via ``TopicExpression.from_client``,
+    using the device's zeep client and the configured dialect) and placed in the
+    subscription request -- not silently dropped.
+    """
+    device = _make_device()
+    events_service = Mock()
+    events_service.CreatePullPointSubscription = AsyncMock(
+        return_value=_subscribe_result()
+    )
+    device.create_events_service = AsyncMock(return_value=events_service)
+
+    subscription = _make_subscription()
+    subscription.Renew = AsyncMock(return_value=_renew_result())
+    device.create_subscription_service = AsyncMock(return_value=subscription)
+    device.create_pullpoint_service = AsyncMock(return_value=Mock())
+    device.has_broken_relative_time = Mock(return_value=False)
+
+    topic = "tns1:RuleEngine/CellMotionDetector/Motion"
+    mgr = PullPointManager(device, INTERVAL, Mock(), topic_filter=topic)
+
+    sentinel = object()
+    with patch(
+        "onvif.managers.TopicExpression.from_client", return_value=sentinel
+    ) as from_client:
+        await mgr._start()
+
+    from_client.assert_called_once_with(
+        events_service.zeep_client, topic, _CONCRETE_SET_DIALECT
+    )
+    params = events_service.CreatePullPointSubscription.await_args.args[0]
+    assert params["Filter"] == {"_value_1": [sentinel]}
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_start_omits_filter_without_topic() -> None:
+    """Without a topic filter the request carries no ``Filter`` element."""
+    device = _make_device()
+    mgr, _subscription, _pullpoint_service = _make_pullpoint_manager(device)
+
+    await mgr._start()
+
+    params = device.create_events_service.return_value.CreatePullPointSubscription.await_args.args[
+        0
+    ]
+    assert "Filter" not in params
