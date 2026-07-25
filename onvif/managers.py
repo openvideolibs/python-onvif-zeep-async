@@ -16,6 +16,7 @@ from onvif.exceptions import ONVIFError
 
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
+from .types import TopicExpression
 from .util import normalize_url, stringify_onvif_error
 from .wrappers import retry_connection_error
 
@@ -32,6 +33,7 @@ SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR = dt.timedelta(seconds=40)
 # this value, we will use this value instead to prevent subscribing over and over
 # again.
 MINIMUM_SUBSCRIPTION_SECONDS = 60.0
+MINIMUM_SUBSCRIPTION_INTERVAL = dt.timedelta(seconds=MINIMUM_SUBSCRIPTION_SECONDS)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -52,7 +54,7 @@ class BaseManager:
     ) -> None:
         """Initialize the notification processor."""
         self._device = device
-        self._interval = interval
+        self._interval = max(interval, MINIMUM_SUBSCRIPTION_INTERVAL)
         self._subscription: ONVIFService | None = None
         self._restart_or_renew_task: asyncio.Task | None = None
         self._loop = asyncio.get_running_loop()
@@ -338,6 +340,54 @@ class NotificationManager(BaseManager):
 class PullPointManager(BaseManager):
     """Manager for PullPoint."""
 
+    def __init__(
+        self,
+        device: ONVIFCamera,
+        interval: dt.timedelta,
+        subscription_lost_callback: Callable[[], None],
+        topic_filter: str | None = None,
+        topic_filter_dialect: str = TopicExpression.DIALECT,
+    ) -> None:
+        """Create a Manager for PullPoint.
+
+        :param device: ONVIFCamera the manager attaches to.
+        :param interval: Termination time of the PullPoint session. Values
+            below :data:`MINIMUM_SUBSCRIPTION_INTERVAL` are raised to that
+            floor.
+        :param subscription_lost_callback: Called when the subscription is
+            lost and cannot be re-established.
+        :param topic_filter: An optional topic expression used to restrict
+            the topics the subscription will listen to. The expression's
+            grammar is determined by ``topic_filter_dialect``.
+        :param topic_filter_dialect: WS-Topic dialect URI used to serialise
+            ``topic_filter``. Defaults to the ONVIF ConcreteSet dialect
+            (``http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet``).
+            Use ``http://docs.oasis-open.org/wsn/t-1/TopicExpression/Full``
+            (or any other URI the camera advertises) to send a different
+            grammar.
+
+        :raises ValueError: If ``topic_filter`` is provided but blank.
+
+        Notes:
+            If your ONVIFCamera has a FixedTopicSet, you will likely not
+            be able to use wildcards in your ``topic_filter``.
+
+        Examples:
+            >>> from datetime import timedelta
+            >>> PullPointManager(
+            ...     cam,
+            ...     timedelta(seconds=60),
+            ...     lambda: print("Lost connection!"),
+            ...     "tns1:RuleEngine/CellMotionDetector/Motion",
+            ... )
+        """
+        if topic_filter is not None and not topic_filter.strip():
+            msg = "topic_filter must be a non-empty string or None"
+            raise ValueError(msg)
+        self._topic_filter: str | None = topic_filter
+        self._topic_filter_dialect: str = topic_filter_dialect
+        super().__init__(device, interval, subscription_lost_callback)
+
     async def _start(self) -> float:
         """
         Start the PullPoint manager.
@@ -347,13 +397,24 @@ class PullPointManager(BaseManager):
         device = self._device
         logger.debug("%s: Setup the PullPoint manager", device.host)
         events_service = await device.create_events_service()
-        result = await events_service.CreatePullPointSubscription(
-            {
-                "InitialTerminationTime": device.get_next_termination_time(
-                    self._interval
-                ),
+
+        subscription_params: dict[str, Any] = {
+            "InitialTerminationTime": device.get_next_termination_time(self._interval),
+        }
+        if self._topic_filter:
+            # WS-Notification FilterType is xs:any maxOccurs="unbounded";
+            # zeep represents it as a list of AnyObject children.
+            subscription_params["Filter"] = {
+                "_value_1": [
+                    TopicExpression.from_client(
+                        events_service.zeep_client,
+                        self._topic_filter,
+                        self._topic_filter_dialect,
+                    )
+                ],
             }
-        )
+
+        result = await events_service.CreatePullPointSubscription(subscription_params)
         # pylint: disable=protected-access
         device.xaddrs[
             "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
