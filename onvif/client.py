@@ -573,6 +573,10 @@ class ONVIFCamera:
 
         # Active service client container
         self.services: dict[tuple[str, str | None], ONVIFService] = {}
+        # Serializes create_onvif_service so concurrent calls for the same
+        # binding don't each build (and orphan the loser's) aiohttp session.
+        # Created lazily on first use; no running loop is promised at __init__.
+        self._services_lock: asyncio.Lock | None = None
 
         self.to_dict = ONVIFService.to_dict
 
@@ -1014,38 +1018,48 @@ class ONVIFCamera:
 
         xaddr, wsdl_file, binding_name = self.get_definition(name, port_type)
 
-        existing_service = self.services.get(binding_key)
-        if existing_service:
-            if existing_service.xaddr == xaddr:
-                return existing_service
-            # Close the existing service since it's no longer valid.
-            # This can happen when a new PullPointSubscription is created.
-            logger.debug(
-                "Closing service %s with %s", binding_key, existing_service.xaddr
+        # Serialize the check-create-store below. Without this, two concurrent
+        # callers for the same binding both miss the cache, both build (and
+        # setup()) a service, and the second store overwrites the first —
+        # orphaning the loser's aiohttp session forever. The pre-lock init is
+        # race-free: coroutines are cooperatively scheduled and there is no
+        # await between the None check and the assignment.
+        if self._services_lock is None:
+            self._services_lock = asyncio.Lock()
+
+        async with self._services_lock:
+            existing_service = self.services.get(binding_key)
+            if existing_service:
+                if existing_service.xaddr == xaddr:
+                    return existing_service
+                # Close the existing service since it's no longer valid.
+                # This can happen when a new PullPointSubscription is created.
+                logger.debug(
+                    "Closing service %s with %s", binding_key, existing_service.xaddr
+                )
+                # Hold a reference to the task so it doesn't get
+                # garbage collected before it completes.
+                await existing_service.close()
+                self.services.pop(binding_key)
+
+            logger.debug("Creating service %s with %s", binding_key, xaddr)
+
+            service = ONVIFService(
+                xaddr,
+                self.user,
+                self.passwd,
+                wsdl_file,
+                self.encrypt,
+                no_cache=self.no_cache,
+                dt_diff=self.dt_diff,
+                binding_name=binding_name,
+                binding_key=binding_key,
+                read_timeout=read_timeout,
+                write_timeout=write_timeout,
             )
-            # Hold a reference to the task so it doesn't get
-            # garbage collected before it completes.
-            await existing_service.close()
-            self.services.pop(binding_key)
+            await service.setup()
 
-        logger.debug("Creating service %s with %s", binding_key, xaddr)
-
-        service = ONVIFService(
-            xaddr,
-            self.user,
-            self.passwd,
-            wsdl_file,
-            self.encrypt,
-            no_cache=self.no_cache,
-            dt_diff=self.dt_diff,
-            binding_name=binding_name,
-            binding_key=binding_key,
-            read_timeout=read_timeout,
-            write_timeout=write_timeout,
-        )
-        await service.setup()
-
-        self.services[binding_key] = service
+            self.services[binding_key] = service
 
         return service
 
