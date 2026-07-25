@@ -96,7 +96,10 @@ def extract_subcodes_as_strings(subcodes: Any) -> list[str]:
 def stringify_onvif_error(error: Exception) -> str:
     """Stringify ONVIF error."""
     if isinstance(error, Fault):
-        message = error.message
+        # error.message can be None for a SOAP fault lacking a Reason/Text
+        # (SOAP 1.2) or faultstring (SOAP 1.1); the += branches below would
+        # raise TypeError on None, so coerce to "" first.
+        message = error.message or ""
         if error.detail is not None:  # checking true is deprecated
             # Detail may be a bytes object, so we need to convert it to string
             if isinstance(error.detail, bytes):
