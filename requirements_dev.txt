@@ -10,4 +10,4 @@ aiointercept==0.1.8
 blockbuster==1.5.26
 
 # pre-commit
-pre-commit==4.6.0
+pre-commit==4.6.1
