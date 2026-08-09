@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -13,7 +13,7 @@ from onvif import ONVIFCamera
 from onvif.managers import NotificationManager, PullPointManager
 from onvif.util import replace_host_port
 
-_WSDL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "onvif", "wsdl")
+_WSDL_PATH = str(Path(__file__).parent.parent / "onvif" / "wsdl")
 MEDIA_NS = "http://www.onvif.org/ver10/media/wsdl"
 
 
