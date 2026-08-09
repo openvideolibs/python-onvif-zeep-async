@@ -83,6 +83,11 @@ def replace_host_port(url: str | None, host: str, port: int) -> str | None:
     parsed = urlparse(url)
     if isinstance(parsed, ParseResultBytes):
         return url
+
+    parsed_host = urlparse(host)
+    if parsed_host.scheme in {"http", "https"} and parsed_host.netloc:
+        host = parsed_host.hostname or host
+
     return urlunparse(parsed._replace(netloc=f"{bracket_host(host)}:{port}"))
 
 
