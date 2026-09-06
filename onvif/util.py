@@ -63,7 +63,9 @@ def bracket_host(host: str) -> str:
     return f"[{host}]"
 
 
-def replace_host_port(url: str | None, host: str, port: int) -> str | None:
+def replace_host_port(
+    url: str | None, host: str, port: int, scheme: str | None = None
+) -> str | None:
     """Rewrite the netloc of ``url`` to ``host:port``.
 
     Cameras behind NAT advertise URLs containing their LAN address (the
@@ -83,11 +85,8 @@ def replace_host_port(url: str | None, host: str, port: int) -> str | None:
     parsed = urlparse(url)
     if isinstance(parsed, ParseResultBytes):
         return url
-
-    parsed_host = urlparse(host)
-    if parsed_host.scheme in {"http", "https"} and parsed_host.netloc:
-        host = parsed_host.hostname or host
-
+    if scheme is not None:
+        parsed = parsed._replace(scheme=scheme)
     return urlunparse(parsed._replace(netloc=f"{bracket_host(host)}:{port}"))
 
 

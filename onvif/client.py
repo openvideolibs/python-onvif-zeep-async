@@ -8,6 +8,7 @@ import logging
 import os.path
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
+from urllib.parse import urlparse
 
 import aiohttp
 import zeep.helpers
@@ -591,6 +592,14 @@ class ONVIFCamera:
         """
         if not self.nat_override:
             return url
+        parsed_host = urlparse(self.host)
+        if parsed_host.scheme in ("http", "https") and parsed_host.netloc:
+            return replace_host_port(
+                url,
+                parsed_host.hostname or self.host,
+                self.port,
+                scheme=parsed_host.scheme,
+            )
         return replace_host_port(url, self.host, self.port)
 
     async def get_capabilities(self) -> dict[str, Any] | None:

@@ -17,16 +17,45 @@ _WSDL_PATH = str(Path(__file__).parent.parent / "onvif" / "wsdl")
 MEDIA_NS = "http://www.onvif.org/ver10/media/wsdl"
 
 
-def test_replace_host_port_strips_scheme_from_constructor_host() -> None:
-    """A scheme-prefixed constructor host must not create a double scheme."""
+def test_replace_host_port_preserves_scheme_unless_overridden() -> None:
+    """Pure netloc replacer keeps URL scheme; explicit scheme wins."""
     assert (
         replace_host_port(
             "http://192.168.1.10/onvif/media",
-            "https://203.0.113.5",
+            "203.0.113.5",
             8443,
         )
         == "http://203.0.113.5:8443/onvif/media"
     )
+    assert (
+        replace_host_port(
+            "http://192.168.1.10/onvif/media",
+            "203.0.113.5",
+            8443,
+            scheme="https",
+        )
+        == "https://203.0.113.5:8443/onvif/media"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rewrite_url_honors_scheme_prefixed_host() -> None:
+    """A scheme-prefixed constructor host must not downgrade HTTPS."""
+    camera = ONVIFCamera(
+        "https://203.0.113.5",
+        8443,
+        "user",
+        "pass",
+        wsdl_dir=_WSDL_PATH,
+        nat_override=True,
+    )
+    try:
+        assert (
+            camera.rewrite_url("http://192.168.1.10/onvif/media")
+            == "https://203.0.113.5:8443/onvif/media"
+        )
+    finally:
+        await camera.close()
 
 
 def test_replace_host_port_handles_ipv6_hosts() -> None:
@@ -113,7 +142,7 @@ async def test_snapshot_uri_is_rewritten_when_nat_override() -> None:
         ):
             assert (
                 await camera.get_snapshot_uri("Profile1")
-                == "http://203.0.113.5:8443/snapshot"
+                == "https://203.0.113.5:8443/snapshot"
             )
     finally:
         await camera.close()
