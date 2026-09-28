@@ -117,9 +117,6 @@ _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
-# Snapshots are a single image, a camera that does not finish the
-# response in this time is likely serving a stream on the snapshot URI
-_SNAPSHOT_TIMEOUT = 10
 # Keepalive is set on the connector, not in ClientTimeout
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
@@ -581,10 +578,7 @@ class ONVIFCamera:
 
         self._snapshot_uris = {}
         self._snapshot_connector = TCPConnector(ssl=_NO_VERIFY_SSL_CONTEXT)
-        self._snapshot_client = ClientSession(
-            connector=self._snapshot_connector,
-            timeout=aiohttp.ClientTimeout(total=_SNAPSHOT_TIMEOUT),
-        )
+        self._snapshot_client = ClientSession(connector=self._snapshot_connector)
 
     def rewrite_url(self, url: str | None) -> str | None:
         """Rewrite ``url`` to use this camera's host:port when nat_override is set.
@@ -892,9 +886,16 @@ class ONVIFCamera:
         return uri
 
     async def get_snapshot(
-        self, profile_token: str, basic_auth: bool = False
+        self,
+        profile_token: str,
+        basic_auth: bool = False,
+        timeout: float | None = None,
     ) -> bytes | None:
-        """Get a snapshot image from the camera."""
+        """Get a snapshot image from the camera.
+
+        timeout is the total time in seconds allowed for each request,
+        including reading the body; None uses the aiohttp default.
+        """
         uri = await self.get_snapshot_uri(profile_token)
         if uri is None:
             return None
@@ -909,7 +910,9 @@ class ONVIFCamera:
                 # Use DigestAuthMiddleware for digest auth
                 middlewares = (DigestAuthMiddleware(self.user, self.passwd),)
 
-        response = await self._try_snapshot_uri(uri, auth=auth, middlewares=middlewares)
+        response = await self._try_snapshot_uri(
+            uri, auth=auth, middlewares=middlewares, timeout=timeout
+        )
         content = await self._try_read_snapshot_content(uri, response)
 
         # If the request fails with a 401, strip user/pass from URL and retry
@@ -919,7 +922,7 @@ class ONVIFCamera:
             and stripped_uri != uri
         ):
             response = await self._try_snapshot_uri(
-                stripped_uri, auth=auth, middlewares=middlewares
+                stripped_uri, auth=auth, middlewares=middlewares, timeout=timeout
             )
             content = await self._try_read_snapshot_content(uri, response)
 
@@ -947,8 +950,14 @@ class ONVIFCamera:
         uri: str,
         auth: BasicAuth | None = None,
         middlewares: tuple[DigestAuthMiddleware, ...] | None = None,
+        timeout: float | None = None,
     ) -> aiohttp.ClientResponse:
-        return await self._snapshot_client.get(uri, auth=auth, middlewares=middlewares)
+        kwargs: dict[str, Any] = {}
+        if timeout is not None:
+            kwargs["timeout"] = aiohttp.ClientTimeout(total=timeout)
+        return await self._snapshot_client.get(
+            uri, auth=auth, middlewares=middlewares, **kwargs
+        )
 
     def get_definition(
         self, name: str, port_type: str | None = None

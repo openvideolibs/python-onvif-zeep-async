@@ -207,7 +207,7 @@ async def test_get_snapshot_timeout(camera: ONVIFCamera) -> None:
 
 @pytest.mark.asyncio
 async def test_get_snapshot_never_completes() -> None:
-    """Test a snapshot response that never completes times out."""
+    """Test a snapshot response that never completes hits the timeout kwarg."""
     release = asyncio.Event()
 
     async def handler(request: web.Request) -> web.StreamResponse:
@@ -222,8 +222,7 @@ async def test_get_snapshot_never_completes() -> None:
     server = TestServer(app)
     await server.start_server()
     try:
-        with patch("onvif.client._SNAPSHOT_TIMEOUT", 0.1):
-            cam = ONVIFCamera("192.168.1.100", 80, "admin", "password")
+        cam = ONVIFCamera("192.168.1.100", 80, "admin", "password")
         try:
             with (
                 patch.object(
@@ -233,7 +232,7 @@ async def test_get_snapshot_never_completes() -> None:
                 ),
                 pytest.raises(ONVIFTimeoutError, match="Timed out fetching"),
             ):
-                await cam.get_snapshot("Profile1")
+                await cam.get_snapshot("Profile1", timeout=0.1)
         finally:
             await cam.close()
     finally:
