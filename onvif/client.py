@@ -116,7 +116,6 @@ _DEFAULT_TIMEOUT = 90
 _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
-_WRITE_TIMEOUT = 90
 # Keepalive is set on the connector, not in ClientTimeout
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
@@ -386,7 +385,6 @@ class ONVIFService:
         binding_name="",
         binding_key="",
         read_timeout: int | None = None,
-        write_timeout: int | None = None,
     ) -> None:
         wsdl_dir, wsdl_name = os.path.split(url)
         cached_files = _WSDL_DIR_FILES.get(wsdl_dir)
@@ -995,7 +993,6 @@ class ONVIFCamera:
         name: str,
         port_type: str | None = None,
         read_timeout: int | None = None,
-        write_timeout: int | None = None,
     ) -> ONVIFService:
         """Create ONVIF service client"""
         name = name.lower()
@@ -1041,7 +1038,6 @@ class ONVIFCamera:
             binding_name=binding_name,
             binding_key=binding_key,
             read_timeout=read_timeout,
-            write_timeout=write_timeout,
         )
         await service.setup()
 
@@ -1095,7 +1091,6 @@ class ONVIFCamera:
             "pullpoint",
             port_type="PullPointSubscription",
             read_timeout=_PULLPOINT_TIMEOUT,
-            write_timeout=_PULLPOINT_TIMEOUT,
         )
 
     async def create_notification_service(self) -> ONVIFService:
