@@ -10,6 +10,7 @@ loading. The zeep/aiohttp dependencies they delegate to are mocked.
 
 from __future__ import annotations
 
+import copy
 import datetime as dt
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -252,11 +253,25 @@ def test_service_wrapper_does_not_swallow_non_typeerror() -> None:
     assert isinstance(excinfo.value.__cause__, ValueError)
 
 
-def test_getattr_unknown_dunder_raises_key_error() -> None:
-    """Accessing an unset dunder attribute raises KeyError (not a wrapper)."""
+def test_getattr_unknown_dunder_raises_attribute_error() -> None:
+    """Accessing an unset dunder attribute raises AttributeError (not a wrapper).
+
+    __getattr__ must obey the Python data model and raise AttributeError for a
+    missing attribute. The previous implementation returned self.__dict__[name],
+    raising KeyError, which leaked out of hasattr()/getattr(obj, name, default)
+    and broke copy.deepcopy() (it probes __deepcopy__ on the instance).
+    """
     service = ONVIFService.__new__(ONVIFService)
-    with pytest.raises(KeyError):
+    with pytest.raises(AttributeError):
         service.__not_a_real_dunder__  # noqa: B018
+
+
+def test_getattr_missing_dunder_is_transparent_to_stdlib_protocols() -> None:
+    """A missing dunder falls back cleanly instead of raising KeyError."""
+    service = ONVIFService.__new__(ONVIFService)
+    assert hasattr(service, "__deepcopy__") is False
+    assert getattr(service, "__deepcopy__", "sentinel") == "sentinel"
+    assert copy.deepcopy(service) is not service
 
 
 def test_authless_dispatch_preserves_underscores_in_method_name() -> None:

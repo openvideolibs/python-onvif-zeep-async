@@ -491,7 +491,12 @@ class ONVIFService:
         response parameters, parameter types, etc...)
         """
         if name.startswith("__") and name.endswith("__"):
-            return self.__dict__[name]
+            # __getattr__ only fires when normal lookup already failed, so the
+            # attribute is genuinely absent. The Python data model requires
+            # AttributeError here; raising KeyError (the old self.__dict__[name])
+            # leaks out of hasattr()/the 3-arg getattr() fallback and breaks
+            # copy.deepcopy(), which probes __deepcopy__ on the instance.
+            raise AttributeError(name)
         if name.startswith("authless_"):
             target = self.ws_client_authless
             op_name = name.removeprefix("authless_")
