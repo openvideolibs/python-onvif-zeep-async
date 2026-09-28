@@ -10,6 +10,7 @@ loading. The zeep/aiohttp dependencies they delegate to are mocked.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -123,6 +124,50 @@ def test_create_service_unknown_binding_raises_value_error() -> None:
 
     with pytest.raises(ValueError, match="No binding found"):
         client.create_service("{ns}Missing", "http://example.com")
+
+
+@pytest.mark.asyncio
+async def test_concurrent_create_onvif_service_builds_one_service() -> None:
+    """Concurrent create_onvif_service calls must not orphan an aiohttp session.
+
+    create_onvif_service checks self.services, then awaits setup() before
+    storing the new service. Two concurrent calls for the same binding both
+    miss the cache and both build an ONVIFService (each opening an aiohttp
+    session); the second store overwrites the first, orphaning the loser's
+    session forever. The _services_lock serializes the check-create-store so
+    exactly one service is built and cached. Without the lock this test builds
+    two services, proving the leak.
+    """
+    built: list[FakeService] = []
+
+    class FakeService:
+        def __init__(self, xaddr: str, *args, binding_key=None, **kwargs) -> None:
+            self.xaddr = xaddr
+            self.binding_key = binding_key
+            self.closed = False
+            built.append(self)
+
+        async def setup(self) -> None:
+            # Yield control so a second concurrent caller can interleave
+            # between the cache miss and the store.
+            await asyncio.sleep(0)
+
+        async def close(self) -> None:
+            self.closed = True
+
+    async with create_test_camera() as cam:
+        cam.get_definition = Mock(
+            return_value=("http://cam/onvif/device", "device.wsdl", "{ns}DeviceBinding")
+        )
+        with patch.object(onvif.client, "ONVIFService", FakeService):
+            services = await asyncio.gather(
+                cam.create_onvif_service("devicemgmt"),
+                cam.create_onvif_service("devicemgmt"),
+            )
+
+    # Exactly one service built and both callers got the same cached instance.
+    assert len(built) == 1
+    assert services[0] is services[1]
 
 
 # --------------------------------------------------------------------------
