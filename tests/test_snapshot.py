@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock, patch
@@ -9,6 +10,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 import zeep.exceptions
+from aiohttp import web
+from aiohttp.test_utils import TestServer
 from aiointercept import aiointercept
 from yarl import URL
 
@@ -200,6 +203,41 @@ async def test_get_snapshot_timeout(camera: ONVIFCamera) -> None:
         await camera.get_snapshot("Profile1")
 
     assert "Timed out fetching" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_get_snapshot_never_completes() -> None:
+    """Test a snapshot response that never completes hits the timeout kwarg."""
+    release = asyncio.Event()
+
+    async def handler(request: web.Request) -> web.StreamResponse:
+        response = web.StreamResponse()
+        await response.prepare(request)
+        await response.write(b"partial")
+        await release.wait()
+        return response
+
+    app = web.Application()
+    app.router.add_get("/snapshot", handler)
+    server = TestServer(app)
+    await server.start_server()
+    try:
+        cam = ONVIFCamera("192.168.1.100", 80, "admin", "password")
+        try:
+            with (
+                patch.object(
+                    cam,
+                    "get_snapshot_uri",
+                    AsyncMock(return_value=str(server.make_url("/snapshot"))),
+                ),
+                pytest.raises(ONVIFTimeoutError, match="Timed out fetching"),
+            ):
+                await cam.get_snapshot("Profile1", timeout=0.1)
+        finally:
+            await cam.close()
+    finally:
+        release.set()
+        await server.close()
 
 
 @pytest.mark.asyncio

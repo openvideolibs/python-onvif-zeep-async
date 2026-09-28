@@ -117,6 +117,7 @@ _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
+_SNAPSHOT_TIMEOUT = 30
 # Keepalive is set on the connector, not in ClientTimeout
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
@@ -305,7 +306,7 @@ def handle_snapshot_errors(func: Callable[..., _T]) -> Callable[..., _T]:
     async def wrapper(self, uri: str, *args: Any, **kwargs: Any) -> _T:
         try:
             return await func(self, uri, *args, **kwargs)
-        except TimeoutError as error:
+        except (TimeoutError, asyncio.TimeoutError) as error:
             msg = f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
             raise ONVIFTimeoutError(msg) from error
         except aiohttp.ClientError as error:
@@ -886,9 +887,16 @@ class ONVIFCamera:
         return uri
 
     async def get_snapshot(
-        self, profile_token: str, basic_auth: bool = False
+        self,
+        profile_token: str,
+        basic_auth: bool = False,
+        timeout: float = _SNAPSHOT_TIMEOUT,
     ) -> bytes | None:
-        """Get a snapshot image from the camera."""
+        """Get a snapshot image from the camera.
+
+        timeout is the total time in seconds allowed for each request,
+        including reading the body.
+        """
         uri = await self.get_snapshot_uri(profile_token)
         if uri is None:
             return None
@@ -903,7 +911,9 @@ class ONVIFCamera:
                 # Use DigestAuthMiddleware for digest auth
                 middlewares = (DigestAuthMiddleware(self.user, self.passwd),)
 
-        response = await self._try_snapshot_uri(uri, auth=auth, middlewares=middlewares)
+        response = await self._try_snapshot_uri(
+            uri, auth=auth, middlewares=middlewares, timeout=timeout
+        )
         content = await self._try_read_snapshot_content(uri, response)
 
         # If the request fails with a 401, strip user/pass from URL and retry
@@ -913,7 +923,7 @@ class ONVIFCamera:
             and stripped_uri != uri
         ):
             response = await self._try_snapshot_uri(
-                stripped_uri, auth=auth, middlewares=middlewares
+                stripped_uri, auth=auth, middlewares=middlewares, timeout=timeout
             )
             content = await self._try_read_snapshot_content(uri, response)
 
@@ -941,8 +951,14 @@ class ONVIFCamera:
         uri: str,
         auth: BasicAuth | None = None,
         middlewares: tuple[DigestAuthMiddleware, ...] | None = None,
+        timeout: float = _SNAPSHOT_TIMEOUT,
     ) -> aiohttp.ClientResponse:
-        return await self._snapshot_client.get(uri, auth=auth, middlewares=middlewares)
+        return await self._snapshot_client.get(
+            uri,
+            auth=auth,
+            middlewares=middlewares,
+            timeout=aiohttp.ClientTimeout(total=timeout),
+        )
 
     def get_definition(
         self, name: str, port_type: str | None = None
