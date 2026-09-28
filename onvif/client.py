@@ -1043,7 +1043,16 @@ class ONVIFCamera:
             read_timeout=read_timeout,
             write_timeout=write_timeout,
         )
-        await service.setup()
+        try:
+            await service.setup()
+        except BaseException:
+            # __init__ already opened an aiohttp session/connector; if setup()
+            # fails (e.g. the device is unreachable and _cached_document raises,
+            # or the binding is missing from the WSDL) the service never lands
+            # in self.services, so ONVIFCamera.close() would never close it.
+            # Release the transport here to avoid leaking the session.
+            await service.close()
+            raise
 
         self.services[binding_key] = service
 
