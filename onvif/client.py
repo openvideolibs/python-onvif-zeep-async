@@ -306,7 +306,7 @@ def handle_snapshot_errors(func: Callable[..., _T]) -> Callable[..., _T]:
     async def wrapper(self, uri: str, *args: Any, **kwargs: Any) -> _T:
         try:
             return await func(self, uri, *args, **kwargs)
-        except TimeoutError as error:
+        except (TimeoutError, asyncio.TimeoutError) as error:
             msg = f"Timed out fetching {obscure_user_pass_url(uri)}: {error}"
             raise ONVIFTimeoutError(msg) from error
         except aiohttp.ClientError as error:
