@@ -25,7 +25,7 @@ from .const import KEEPALIVE_EXPIRY
 from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
-from .types import FastDateTime, ForgivingTime
+from .types import FastDateTime, ForgivingTime, TopicExpression
 from .util import (
     bracket_host,
     create_no_verify_ssl_context,
@@ -830,9 +830,21 @@ class ONVIFCamera:
         self,
         interval: dt.timedelta,
         subscription_lost_callback: Callable[[], None],
+        topic_filter: str | None = None,
+        topic_filter_dialect: str = TopicExpression.DIALECT,
     ) -> PullPointManager:
-        """Create a pullpoint manager."""
-        manager = PullPointManager(self, interval, subscription_lost_callback)
+        """Create a pullpoint manager.
+
+        See :class:`onvif.managers.PullPointManager` for ``topic_filter`` and
+        ``topic_filter_dialect`` semantics.
+        """
+        manager = PullPointManager(
+            self,
+            interval,
+            subscription_lost_callback,
+            topic_filter,
+            topic_filter_dialect,
+        )
         await manager.start()
         return manager
 
