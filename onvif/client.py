@@ -117,6 +117,9 @@ _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
+# Snapshots are a single image, a camera that does not finish the
+# response in this time is likely serving a stream on the snapshot URI
+_SNAPSHOT_TIMEOUT = 10
 # Keepalive is set on the connector, not in ClientTimeout
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
@@ -578,7 +581,10 @@ class ONVIFCamera:
 
         self._snapshot_uris = {}
         self._snapshot_connector = TCPConnector(ssl=_NO_VERIFY_SSL_CONTEXT)
-        self._snapshot_client = ClientSession(connector=self._snapshot_connector)
+        self._snapshot_client = ClientSession(
+            connector=self._snapshot_connector,
+            timeout=aiohttp.ClientTimeout(total=_SNAPSHOT_TIMEOUT),
+        )
 
     def rewrite_url(self, url: str | None) -> str | None:
         """Rewrite ``url`` to use this camera's host:port when nat_override is set.
