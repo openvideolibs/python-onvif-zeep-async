@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ssl
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from onvif.settings import DEFAULT_SETTINGS
 from onvif.transport import ASYNC_TRANSPORT, AsyncSafeTransport
 from onvif.util import (
     bracket_host,
+    create_no_verify_ssl_context,
     extract_subcodes_as_strings,
     is_auth_error,
     normalize_url,
@@ -268,3 +270,14 @@ def test_zeep_pythonvalue_monkey_patch_returns_value() -> None:
     assert (
         zeep.xsd.simple.AnySimpleType.pythonvalue(None, sentinel) == sentinel  # type: ignore[arg-type]
     )
+
+
+def test_create_no_verify_ssl_context_disables_verification() -> None:
+    """The context must not verify certificates or hostnames (cameras use self-signed certs)."""
+    context = create_no_verify_ssl_context()
+    assert isinstance(context, ssl.SSLContext)
+    assert context.check_hostname is False
+    assert context.verify_mode is ssl.CERT_NONE
+    # OP_LEGACY_SERVER_CONNECT must be set so old camera firmware can still connect.
+    legacy = getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+    assert context.options & legacy == legacy
