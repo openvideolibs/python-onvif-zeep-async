@@ -293,6 +293,30 @@ async def test_get_snapshot_uri_caching(camera: ONVIFCamera) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_snapshot_uri_transient_fault_not_cached(
+    camera: ONVIFCamera,
+) -> None:
+    """A transient Fault must not poison the cache; the next call retries."""
+    with patch.object(
+        camera, "create_media_service", new_callable=AsyncMock
+    ) as mock_media:
+        mock_service = Mock()
+        mock_service.create_type = Mock(return_value=Mock())
+        mock_service.GetSnapshotUri = AsyncMock(
+            side_effect=zeep.exceptions.Fault("temporarily unavailable")
+        )
+        mock_media.return_value = mock_service
+
+        # Transient failure returns None without caching it.
+        assert await camera.get_snapshot_uri("Profile1") is None
+        assert "Profile1" not in camera._snapshot_uris
+
+    # Device recovers — the fixture's media mock serves a valid URI again.
+    uri = await camera.get_snapshot_uri("Profile1")
+    assert uri == "http://camera.local/snapshot"
+
+
+@pytest.mark.asyncio
 async def test_snapshot_client_session_reuse(
     camera: ONVIFCamera, mock_aioresponse: aiointercept
 ) -> None:
