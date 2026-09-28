@@ -117,6 +117,7 @@ _PULLPOINT_TIMEOUT = 90
 _CONNECT_TIMEOUT = 30
 _READ_TIMEOUT = 90
 _WRITE_TIMEOUT = 90
+_SNAPSHOT_TIMEOUT = 60
 # Keepalive is set on the connector, not in ClientTimeout
 _NO_VERIFY_SSL_CONTEXT = create_no_verify_ssl_context()
 
@@ -889,12 +890,12 @@ class ONVIFCamera:
         self,
         profile_token: str,
         basic_auth: bool = False,
-        timeout: float | None = None,
+        timeout: float = _SNAPSHOT_TIMEOUT,
     ) -> bytes | None:
         """Get a snapshot image from the camera.
 
         timeout is the total time in seconds allowed for each request,
-        including reading the body; None uses the aiohttp default.
+        including reading the body.
         """
         uri = await self.get_snapshot_uri(profile_token)
         if uri is None:
@@ -950,13 +951,13 @@ class ONVIFCamera:
         uri: str,
         auth: BasicAuth | None = None,
         middlewares: tuple[DigestAuthMiddleware, ...] | None = None,
-        timeout: float | None = None,
+        timeout: float = _SNAPSHOT_TIMEOUT,
     ) -> aiohttp.ClientResponse:
-        kwargs: dict[str, Any] = {}
-        if timeout is not None:
-            kwargs["timeout"] = aiohttp.ClientTimeout(total=timeout)
         return await self._snapshot_client.get(
-            uri, auth=auth, middlewares=middlewares, **kwargs
+            uri,
+            auth=auth,
+            middlewares=middlewares,
+            timeout=aiohttp.ClientTimeout(total=timeout),
         )
 
     def get_definition(
