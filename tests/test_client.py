@@ -31,6 +31,7 @@ from onvif.client import (
     _resolve_active_prefix,
 )
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
+from onvif.types import TopicExpression
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -466,7 +467,9 @@ async def test_create_pullpoint_manager() -> None:
             result = await cam.create_pullpoint_manager(interval, callback)
 
             assert result is instance
-            mock_manager.assert_called_once_with(cam, interval, callback)
+            mock_manager.assert_called_once_with(
+                cam, interval, callback, None, TopicExpression.DIALECT
+            )
             instance.start.assert_awaited_once()
 
 

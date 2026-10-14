@@ -19,6 +19,7 @@ import pytest
 from zeep.exceptions import Fault, XMLSyntaxError
 
 from onvif.managers import (
+    MINIMUM_SUBSCRIPTION_INTERVAL,
     SUBSCRIPTION_RESTART_INTERVAL_ON_ERROR,
     BaseManager,
     NotificationManager,
@@ -903,3 +904,143 @@ async def test_pullpoint_manager_get_service() -> None:
     await mgr._start()
 
     assert mgr.get_service() is pullpoint_service
+
+
+# --- Interval floor (BaseManager) --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_base_manager_floors_short_interval() -> None:
+    """A sub-minimum interval is raised to the 60-second floor."""
+    mgr = PullPointManager(_make_device(), dt.timedelta(seconds=10), Mock())
+    assert mgr._interval == MINIMUM_SUBSCRIPTION_INTERVAL
+
+
+@pytest.mark.asyncio
+async def test_base_manager_preserves_minimum_interval() -> None:
+    """An interval equal to the minimum is preserved."""
+    mgr = PullPointManager(_make_device(), MINIMUM_SUBSCRIPTION_INTERVAL, Mock())
+    assert mgr._interval == MINIMUM_SUBSCRIPTION_INTERVAL
+
+
+@pytest.mark.asyncio
+async def test_base_manager_does_not_cap_long_interval() -> None:
+    """Intervals above the minimum are kept verbatim.
+
+    Regression guard for the inverted clamp in the original TopicFilter PR,
+    which capped intervals down to 60s instead of flooring at 60s.
+    """
+    five_minutes = dt.timedelta(minutes=5)
+    mgr = PullPointManager(_make_device(), five_minutes, Mock())
+    assert mgr._interval == five_minutes
+
+
+@pytest.mark.asyncio
+async def test_notification_manager_inherits_interval_floor() -> None:
+    """The floor applies to NotificationManager too (it lives in BaseManager)."""
+    mgr = NotificationManager(
+        _make_device(),
+        "http://example.com/onvif/notify",
+        dt.timedelta(seconds=5),
+        Mock(),
+    )
+    assert mgr._interval == MINIMUM_SUBSCRIPTION_INTERVAL
+
+
+# --- Topic filter (PullPointManager) -----------------------------------------
+
+_CONCRETE_SET_DIALECT = "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet"
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_defaults_have_no_topic_filter() -> None:
+    """Default construction leaves the topic filter unset."""
+    mgr = PullPointManager(_make_device(), INTERVAL, Mock())
+    assert mgr._topic_filter is None
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_stores_topic_filter_and_default_dialect() -> None:
+    """A topic filter is recorded with the ConcreteSet default dialect."""
+    mgr = PullPointManager(
+        _make_device(),
+        INTERVAL,
+        Mock(),
+        topic_filter="tns1:RuleEngine/CellMotionDetector/Motion",
+    )
+    assert mgr._topic_filter == "tns1:RuleEngine/CellMotionDetector/Motion"
+    assert mgr._topic_filter_dialect == _CONCRETE_SET_DIALECT
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_stores_custom_dialect() -> None:
+    """A caller can override the WS-Topic dialect URI."""
+    full_dialect = "http://docs.oasis-open.org/wsn/t-1/TopicExpression/Full"
+    mgr = PullPointManager(
+        _make_device(),
+        INTERVAL,
+        Mock(),
+        topic_filter="tns1:RuleEngine//.",
+        topic_filter_dialect=full_dialect,
+    )
+    assert mgr._topic_filter_dialect == full_dialect
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t\n"])
+@pytest.mark.asyncio
+async def test_pullpoint_manager_rejects_blank_topic_filter(blank: str) -> None:
+    """Blank topic filters are rejected up front, not silently sent."""
+    with pytest.raises(ValueError, match="topic_filter must be a non-empty"):
+        PullPointManager(_make_device(), INTERVAL, Mock(), topic_filter=blank)
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_start_sends_topic_filter() -> None:
+    """A configured topic filter reaches the CreatePullPointSubscription request.
+
+    Guards the ``_start()`` integration path: the stored filter must be turned
+    into a WS-Notification ``Filter`` element (via ``TopicExpression.from_client``,
+    using the device's zeep client and the configured dialect) and placed in the
+    subscription request -- not silently dropped.
+    """
+    device = _make_device()
+    events_service = Mock()
+    events_service.CreatePullPointSubscription = AsyncMock(
+        return_value=_subscribe_result()
+    )
+    device.create_events_service = AsyncMock(return_value=events_service)
+
+    subscription = _make_subscription()
+    subscription.Renew = AsyncMock(return_value=_renew_result())
+    device.create_subscription_service = AsyncMock(return_value=subscription)
+    device.create_pullpoint_service = AsyncMock(return_value=Mock())
+    device.has_broken_relative_time = Mock(return_value=False)
+
+    topic = "tns1:RuleEngine/CellMotionDetector/Motion"
+    mgr = PullPointManager(device, INTERVAL, Mock(), topic_filter=topic)
+
+    sentinel = object()
+    with patch(
+        "onvif.managers.TopicExpression.from_client", return_value=sentinel
+    ) as from_client:
+        await mgr._start()
+
+    from_client.assert_called_once_with(
+        events_service.zeep_client, topic, _CONCRETE_SET_DIALECT
+    )
+    params = events_service.CreatePullPointSubscription.await_args.args[0]
+    assert params["Filter"] == {"_value_1": [sentinel]}
+
+
+@pytest.mark.asyncio
+async def test_pullpoint_manager_start_omits_filter_without_topic() -> None:
+    """Without a topic filter the request carries no ``Filter`` element."""
+    device = _make_device()
+    mgr, _subscription, _pullpoint_service = _make_pullpoint_manager(device)
+
+    await mgr._start()
+
+    params = device.create_events_service.return_value.CreatePullPointSubscription.await_args.args[
+        0
+    ]
+    assert "Filter" not in params
