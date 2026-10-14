@@ -229,6 +229,22 @@ def test_stringify_onvif_error_fault_empty_message():
     )
 
 
+def test_stringify_onvif_error_fault_none_message():
+    # A SOAP fault can arrive with message=None (no Reason/Text in SOAP 1.2,
+    # no faultstring in SOAP 1.1). The trailing branches must not crash on it.
+    error = Fault(None, code="soap:Sender", subcodes=[_Subcode("ter:NotAuthorized")])
+    assert stringify_onvif_error(error) == (
+        " (code:soap:Sender) (subcodes:ter:NotAuthorized)"
+    )
+
+
+def test_is_auth_error_none_message():
+    # is_auth_error routes through stringify_onvif_error; a None message here
+    # must be detected via subcodes rather than raising.
+    error = Fault(None, subcodes=[_Subcode("ter:NotAuthorized")])
+    assert is_auth_error(error) is True
+
+
 def test_is_auth_error_non_fault():
     assert is_auth_error(ValueError("NotAuthorized")) is False
 
