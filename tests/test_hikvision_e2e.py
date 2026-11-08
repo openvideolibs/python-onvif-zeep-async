@@ -157,6 +157,42 @@ async def test_update_xaddrs_falls_back_to_capabilities_when_get_services_broken
 
 
 @pytest.mark.asyncio
+async def test_update_xaddrs_falls_back_on_empty_subcode_fault() -> None:
+    """A GetServices fault with an empty Subcode still reaches the fallback.
+
+    TP-Link NC450 firmware answers GetServices with HTTP 400 and a SOAP 1.2
+    fault whose ``Subcode`` has no ``Value`` child. Unsanitized, zeep raises
+    ``AttributeError`` while building the fault and update_xaddrs fails before
+    it can fall back to GetCapabilities.
+    """
+    camera = FakeHikvisionCamera(empty_subcode_get_services=True)
+    await camera.start()
+    cam = ONVIFCamera(
+        camera.host,
+        camera.port,
+        "admin",
+        "Password1",
+        wsdl_dir=WSDL_DIR,
+        no_cache=True,
+    )
+    try:
+        await cam.update_xaddrs()
+        base = camera.base_url
+        assert cam.xaddrs == {
+            "http://www.onvif.org/ver20/analytics/wsdl": f"{base}/onvif/Analytics",
+            "http://www.onvif.org/ver10/events/wsdl": f"{base}/onvif/Events",
+            "http://www.onvif.org/ver20/imaging/wsdl": f"{base}/onvif/Imaging",
+            "http://www.onvif.org/ver10/media/wsdl": f"{base}/onvif/Media",
+            "http://www.onvif.org/ver20/ptz/wsdl": f"{base}/onvif/PTZ",
+        }
+        assert camera.last_request("GetServices") is not None
+        assert camera.last_request("GetCapabilities") is not None
+    finally:
+        await cam.close()
+        await camera.stop()
+
+
+@pytest.mark.asyncio
 async def test_get_capabilities_returns_dict(onvif_camera: ONVIFCamera) -> None:
     """get_capabilities exposes the parsed capabilities as a dictionary."""
     capabilities = await onvif_camera.get_capabilities()
