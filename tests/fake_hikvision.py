@@ -77,15 +77,25 @@ def _soap_envelope(body: str) -> str:
     )
 
 
-def _soap_fault(reason: str, subcode: str = "ter:NotAuthorized") -> str:
-    """Build a SOAP 1.2 fault envelope mimicking an ONVIF error."""
+def _soap_fault(reason: str, subcode: str | None = "ter:NotAuthorized") -> str:
+    """Build a SOAP 1.2 fault envelope mimicking an ONVIF error.
+
+    ``subcode=None`` emits an empty ``<env:Subcode></env:Subcode>`` with no
+    ``Value`` child, which is invalid SOAP 1.2 but what TP-Link NC450 firmware
+    sends for unsupported operations such as ``GetServices``.
+    """
+    subcode_xml = (
+        "<env:Subcode></env:Subcode>"
+        if subcode is None
+        else f"<env:Subcode><env:Value>{subcode}</env:Value></env:Subcode>"
+    )
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<env:Envelope xmlns:env="http://www.w3.org/2003/05/soap-envelope" '
         'xmlns:ter="http://www.onvif.org/ver10/error">'
         "<env:Body><env:Fault>"
         "<env:Code><env:Value>env:Sender</env:Value>"
-        f"<env:Subcode><env:Value>{subcode}</env:Value></env:Subcode></env:Code>"
+        f"{subcode_xml}</env:Code>"
         f'<env:Reason><env:Text xml:lang="en">{reason}</env:Text></env:Reason>'
         "</env:Fault></env:Body></env:Envelope>"
     )
@@ -144,6 +154,10 @@ class FakeHikvisionCamera:
     # device that does not implement it. The client must then fall back to
     # GetCapabilities for service discovery.
     broken_get_services: bool = False
+    # When True, GetServices answers like TP-Link NC450 firmware: HTTP 400 with
+    # a SOAP fault whose Subcode is empty (no Value child). zeep cannot parse
+    # that subcode, so the client must sanitize it to reach the fallback.
+    empty_subcode_get_services: bool = False
     # PullPoint subscription timestamps. Hikvision firmware famously emits an
     # xs:dateTime using "-" as the date/time separator (e.g. 2024-08-17-12:30:45Z)
     # which only parses thanks to FastDateTime (see issue #178). The defaults
@@ -306,6 +320,17 @@ class FakeHikvisionCamera:
             return web.Response(
                 status=401,
                 body=_soap_fault("Authentication required").encode(),
+                content_type="application/soap+xml",
+            )
+
+        if operation == "GetServices" and self.empty_subcode_get_services:
+            return web.Response(
+                status=400,
+                body=_soap_fault(
+                    "Method 'GetServices' not implemented: "
+                    "method name or namespace not recognized",
+                    subcode=None,
+                ).encode(),
                 content_type="application/soap+xml",
             )
 

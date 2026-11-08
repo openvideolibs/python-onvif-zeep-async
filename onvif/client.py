@@ -22,6 +22,7 @@ from onvif.definition import SERVICES
 from onvif.exceptions import ONVIFAuthError, ONVIFError, ONVIFTimeoutError
 
 from .const import KEEPALIVE_EXPIRY
+from .fault import StripEmptyFaultSubcodePlugin
 from .managers import NotificationManager, PullPointManager
 from .settings import DEFAULT_SETTINGS
 from .transport import ASYNC_TRANSPORT
@@ -455,7 +456,7 @@ class ONVIFService:
             wsdl=self.document,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingIfMissingPlugin()],
+            plugins=[WsAddressingIfMissingPlugin(), StripEmptyFaultSubcodePlugin()],
         )
         self.ws_client_authless = self.zeep_client_authless.create_service(
             binding_name, self.xaddr
@@ -465,7 +466,7 @@ class ONVIFService:
             wsse=wsse,
             transport=self.transport,
             settings=settings,
-            plugins=[WsAddressingIfMissingPlugin()],
+            plugins=[WsAddressingIfMissingPlugin(), StripEmptyFaultSubcodePlugin()],
         )
         self.ws_client = self.zeep_client.create_service(binding_name, self.xaddr)
         namespace = binding_name[binding_name.find("{") + 1 : binding_name.find("}")]
